@@ -13,20 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, 'skip-sims')"
     steps:
-      - uses: actions/setup-go@v1
-        id: go
-        with:
-          go-version: 1.14
-      - name: Setup env for GO
-        #  this is only used until the setup-go action is updated
-        run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-          echo "::set-env name=GO111MODULE::"on""
-        shell: bash
+      - uses: actions/setup-go@v2-beta
       - name: install runsim
         run: |
-          go get github.com/cosmos/tools/cmd/runsim@v1.0.0
+          export GO111MODULE="on" && go get github.com/cosmos/tools/cmd/runsim@v1.0.0
       - uses: actions/cache@v1
         with:
           path: ~/go/bin
@@ -36,22 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: Build
     steps:
-      - uses: actions/setup-go@v1
-        id: go
-        with:
-          go-version: 1.14
-      - name: Setup env for GO
-        #  this is only used until the setup-go action is updated
-        run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-        shell: bash
+      - uses: actions/setup-go@v2-beta
       - uses: actions/checkout@v2
       - uses: actions/cache@v1
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-go-runsim-binary
-      - name: test nondeterminism
+      - name: test-sim-nondeterminism
         run: |
           make test-sim-nondeterminism
 
@@ -59,16 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: Build
     steps:
-      - uses: actions/setup-go@v1
-        id: go
-        with:
-          go-version: 1.14
-      - name: Setup env for GO
-        #  this is only used until the setup-go action is updated
-        run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-        shell: bash
+      - uses: actions/setup-go@v2-beta
       - uses: actions/checkout@v2
       - uses: actions/cache@v1
         with:
@@ -82,39 +54,21 @@ jobs:
     runs-on: ubuntu-latest
     needs: Build
     steps:
-      - uses: actions/setup-go@v1
-        id: go
-        with:
-          go-version: 1.14
-      - name: Setup env for GO
-        #  this is only used until the setup-go action is updated
-        run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-        shell: bash
+      - uses: actions/setup-go@v2-beta
       - uses: actions/checkout@v2
       - uses: actions/cache@v1
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-go-runsim-binary
-      - name: test after import
+      - name: test-sim-after-import
         run: |
-          make test-sim-import-export
+          make test-sim-after-import
 
   test-sim-multi-seed-short:
     runs-on: ubuntu-latest
     needs: Build
     steps:
-      - uses: actions/setup-go@v1
-        id: go
-        with:
-          go-version: 1.14
-      - name: Setup env for GO
-        #  this is only used until the setup-go action is updated
-        run: |
-          echo "::set-env name=GOPATH::$(go env GOPATH)"
-          echo "::add-path::$(go env GOPATH)/bin"
-        shell: bash
+      - uses: actions/setup-go@v2-beta
       - uses: actions/checkout@v2
       - uses: actions/cache@v1
         with:
