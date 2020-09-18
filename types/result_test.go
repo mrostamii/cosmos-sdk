@@ -28,13 +28,3 @@ func TestABCIMessageLog(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(bz), msgLogs.String())
 }
-
-func TestABCIMessageLog(t *testing.T) {
-	events := Events{NewEvent("transfer", NewAttribute("sender", "foo"))}
-	msgLog := NewABCIMessageLog(0, true, "", events)
-
-	msgLogs := ABCIMessageLogs{msgLog}
-	bz, err := codec.Cdc.MarshalJSON(msgLogs)
-	require.NoError(t, err)
-	require.Equal(t, string(bz), msgLogs.String())
-}

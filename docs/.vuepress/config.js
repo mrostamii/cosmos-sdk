@@ -38,18 +38,6 @@ module.exports = {
     repo: "cosmos/cosmos-sdk",
     docsRepo: "cosmos/cosmos-sdk",
     docsDir: "docs",
-    docsBranch: "master",
-    editLinkText: "Edit this page on Github",
-    lastUpdated: true,
-    algolia: {
-      apiKey: "a6e2f64347bb826b732e118c1366819a",
-      indexName: "cosmos_network",
-      debug: false
-    },
-    nav: [
-      { text: "Back to Cosmos", link: "https://cosmos.network" },
-      { text: "RPC", link: "https://cosmos.network/rpc/" }
-    ],
     editLinks: true,
     label: "sdk",
     sidebar: [
