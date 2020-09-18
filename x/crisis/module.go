@@ -2,6 +2,7 @@ package crisis
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
@@ -45,8 +46,9 @@ func (AppModuleBasic) DefaultGenesis() json.RawMessage {
 func (AppModuleBasic) ValidateGenesis(bz json.RawMessage) error {
 	var data types.GenesisState
 	if err := types.ModuleCdc.UnmarshalJSON(bz, &data); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal %s genesis state: %w", ModuleName, err)
 	}
+
 	return types.ValidateGenesis(data)
 }
 
@@ -60,6 +62,8 @@ func (AppModuleBasic) GetTxCmd(cdc *codec.Codec) *cobra.Command {
 
 // GetQueryCmd returns no root query command for the crisis module.
 func (AppModuleBasic) GetQueryCmd(_ *codec.Codec) *cobra.Command { return nil }
+
+//____________________________________________________________________________
 
 // AppModule implements an application module for the crisis module.
 type AppModule struct {
@@ -121,7 +125,7 @@ func (am AppModule) ExportGenesis(ctx sdk.Context) json.RawMessage {
 	return types.ModuleCdc.MustMarshalJSON(gs)
 }
 
-// BeginBlock returns the begin blocker for the crisis module.
+// BeginBlock performs a no-op.
 func (AppModule) BeginBlock(_ sdk.Context, _ abci.RequestBeginBlock) {}
 
 // EndBlock returns the end blocker for the crisis module. It returns no validator

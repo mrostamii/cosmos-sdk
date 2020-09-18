@@ -17,11 +17,7 @@ import (
 )
 
 // copied from iavl/store_test.go
-var (
-	cacheSize        = 100
-	numRecent  int64 = 5
-	storeEvery int64 = 3
-)
+var cacheSize = 100
 
 func bz(s string) []byte { return []byte(s) }
 
@@ -88,22 +84,23 @@ func testPrefixStore(t *testing.T, baseStore types.KVStore, prefix []byte) {
 
 func TestIAVLStorePrefix(t *testing.T) {
 	db := dbm.NewMemDB()
-	tree := tiavl.NewMutableTree(db, cacheSize)
-	iavlStore := iavl.UnsafeNewStore(tree, numRecent, storeEvery)
+	tree, err := tiavl.NewMutableTree(db, cacheSize)
+	require.NoError(t, err)
+	iavlStore := iavl.UnsafeNewStore(tree)
 
 	testPrefixStore(t, iavlStore, []byte("test"))
 }
 
 func TestPrefixKVStoreNoNilSet(t *testing.T) {
 	meter := types.NewGasMeter(100000000)
-	mem := dbadapter.Store{dbm.NewMemDB()}
+	mem := dbadapter.Store{DB: dbm.NewMemDB()}
 	gasStore := gaskv.NewStore(mem, meter, types.KVGasConfig())
 	require.Panics(t, func() { gasStore.Set([]byte("key"), nil) }, "setting a nil value should panic")
 }
 
 func TestPrefixStoreIterate(t *testing.T) {
 	db := dbm.NewMemDB()
-	baseStore := dbadapter.Store{db}
+	baseStore := dbadapter.Store{DB: db}
 	prefix := []byte("test")
 	prefixStore := NewStore(baseStore, prefix)
 
@@ -149,7 +146,7 @@ func TestCloneAppend(t *testing.T) {
 
 func TestPrefixStoreIteratorEdgeCase(t *testing.T) {
 	db := dbm.NewMemDB()
-	baseStore := dbadapter.Store{db}
+	baseStore := dbadapter.Store{DB: db}
 
 	// overflow in cpIncr
 	prefix := []byte{0xAA, 0xFF, 0xFF}
@@ -179,7 +176,7 @@ func TestPrefixStoreIteratorEdgeCase(t *testing.T) {
 
 func TestPrefixStoreReverseIteratorEdgeCase(t *testing.T) {
 	db := dbm.NewMemDB()
-	baseStore := dbadapter.Store{db}
+	baseStore := dbadapter.Store{DB: db}
 
 	// overflow in cpIncr
 	prefix := []byte{0xAA, 0xFF, 0xFF}
@@ -207,7 +204,7 @@ func TestPrefixStoreReverseIteratorEdgeCase(t *testing.T) {
 	iter.Close()
 
 	db = dbm.NewMemDB()
-	baseStore = dbadapter.Store{db}
+	baseStore = dbadapter.Store{DB: db}
 
 	// underflow in cpDecr
 	prefix = []byte{0xAA, 0x00, 0x00}
@@ -238,7 +235,7 @@ func TestPrefixStoreReverseIteratorEdgeCase(t *testing.T) {
 
 func mockStoreWithStuff() types.KVStore {
 	db := dbm.NewMemDB()
-	store := dbadapter.Store{db}
+	store := dbadapter.Store{DB: db}
 	// Under "key" prefix
 	store.Set(bz("key"), bz("value"))
 	store.Set(bz("key1"), bz("value1"))

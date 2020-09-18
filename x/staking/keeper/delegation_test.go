@@ -208,7 +208,6 @@ func TestUnbondingDelegationsMaxEntries(t *testing.T) {
 	startTokens := sdk.TokensFromConsensusPower(10)
 	bondDenom := keeper.BondDenom(ctx)
 
-	bondedPool := keeper.GetBondedPool(ctx)
 	notBondedPool := keeper.GetNotBondedPool(ctx)
 	err := notBondedPool.SetCoins(sdk.NewCoins(sdk.NewCoin(bondDenom, startTokens)))
 	require.NoError(t, err)
@@ -240,7 +239,7 @@ func TestUnbondingDelegationsMaxEntries(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	bondedPool = keeper.GetBondedPool(ctx)
+	bondedPool := keeper.GetBondedPool(ctx)
 	notBondedPool = keeper.GetNotBondedPool(ctx)
 	require.True(sdk.IntEq(t, bondedPool.GetCoins().AmountOf(bondDenom), oldBonded.SubRaw(int64(maxEntries))))
 	require.True(sdk.IntEq(t, notBondedPool.GetCoins().AmountOf(bondDenom), oldNotBonded.AddRaw(int64(maxEntries))))
@@ -297,7 +296,7 @@ func TestUndelegateSelfDelegationBelowMinSelfDelegation(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -309,7 +308,7 @@ func TestUndelegateSelfDelegationBelowMinSelfDelegation(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	bondedPool := keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -321,7 +320,7 @@ func TestUndelegateSelfDelegationBelowMinSelfDelegation(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	bondedPool = keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -357,7 +356,7 @@ func TestUndelegateFromUnbondingValidator(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -368,7 +367,7 @@ func TestUndelegateFromUnbondingValidator(t *testing.T) {
 	keeper.SetDelegation(ctx, selfDelegation)
 
 	bondedPool := keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -379,7 +378,7 @@ func TestUndelegateFromUnbondingValidator(t *testing.T) {
 	require.Equal(t, delTokens, issuedShares.RoundInt())
 
 	bondedPool = keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -388,7 +387,7 @@ func TestUndelegateFromUnbondingValidator(t *testing.T) {
 	keeper.SetDelegation(ctx, delegation)
 
 	bondedPool = keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -439,7 +438,7 @@ func TestUndelegateFromUnbondedValidator(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -457,7 +456,7 @@ func TestUndelegateFromUnbondedValidator(t *testing.T) {
 	keeper.SetDelegation(ctx, selfDelegation)
 
 	bondedPool := keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -518,7 +517,7 @@ func TestUnbondingAllDelegationFromValidator(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -542,7 +541,7 @@ func TestUnbondingAllDelegationFromValidator(t *testing.T) {
 	require.Equal(t, delTokens, issuedShares.RoundInt())
 
 	bondedPool := keeper.GetBondedPool(ctx)
-	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins))
+	err = bondedPool.SetCoins(bondedPool.GetCoins().Add(delCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, bondedPool)
 
@@ -673,7 +672,7 @@ func TestRedelegateToSameValidator(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -700,7 +699,7 @@ func TestRedelegationMaxEntries(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -753,7 +752,7 @@ func TestRedelegateSelfDelegation(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -805,7 +804,7 @@ func TestRedelegateFromUnbondingValidator(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
@@ -884,7 +883,7 @@ func TestRedelegateFromUnbondedValidator(t *testing.T) {
 
 	// add bonded tokens to pool for delegations
 	notBondedPool := keeper.GetNotBondedPool(ctx)
-	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins))
+	err := notBondedPool.SetCoins(notBondedPool.GetCoins().Add(startCoins...))
 	require.NoError(t, err)
 	keeper.supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 

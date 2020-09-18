@@ -5,9 +5,10 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 
+	"github.com/stretchr/testify/require"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/distribution/types"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -32,7 +33,7 @@ func TestProposalHandlerPassed(t *testing.T) {
 
 	// add coins to the module account
 	macc := keeper.GetDistributionAccount(ctx)
-	err := macc.SetCoins(macc.GetCoins().Add(amount))
+	err := macc.SetCoins(macc.GetCoins().Add(amount...))
 	require.NoError(t, err)
 
 	supplyKeeper.SetModuleAccount(ctx, macc)
@@ -42,7 +43,7 @@ func TestProposalHandlerPassed(t *testing.T) {
 	accountKeeper.SetAccount(ctx, account)
 
 	feePool := keeper.GetFeePool(ctx)
-	feePool.CommunityPool = sdk.NewDecCoins(amount)
+	feePool.CommunityPool = sdk.NewDecCoinsFromCoins(amount...)
 	keeper.SetFeePool(ctx, feePool)
 
 	tp := testProposal(recipient, amount)

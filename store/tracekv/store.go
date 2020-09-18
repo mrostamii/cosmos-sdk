@@ -149,6 +149,11 @@ func (ti *traceIterator) Close() {
 	ti.parent.Close()
 }
 
+// Error delegates the Error call to the parent iterator.
+func (ti *traceIterator) Error() error {
+	return ti.parent.Error()
+}
+
 // GetStoreType implements the KVStore interface. It returns the underlying
 // KVStore type.
 func (tkv *Store) GetStoreType() types.StoreType {
@@ -169,7 +174,6 @@ func (tkv *Store) CacheWrapWithTrace(_ io.Writer, _ types.TraceContext) types.Ca
 
 // writeOperation writes a KVStore operation to the underlying io.Writer as
 // JSON-encoded data where the key/value pair is base64 encoded.
-// nolint: errcheck
 func writeOperation(w io.Writer, op operation, tc types.TraceContext, key, value []byte) {
 	traceOp := traceOperation{
 		Operation: op,

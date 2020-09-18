@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/viper"
 
 	tmcli "github.com/tendermint/tendermint/libs/cli"
+
+	"github.com/cosmos/cosmos-sdk/crypto/keys"
 )
 
 // nolint
@@ -20,6 +22,11 @@ const (
 	DefaultGasLimit      = 200000
 	GasFlagAuto          = "auto"
 
+	// DefaultKeyringBackend
+	DefaultKeyringBackend = keys.BackendOS
+)
+
+const (
 	// BroadcastBlock defines a tx broadcasting mode where the client waits for
 	// the tx to be committed in a block.
 	BroadcastBlock = "block"
@@ -29,7 +36,10 @@ const (
 	// BroadcastAsync defines a tx broadcasting mode where the client returns
 	// immediately.
 	BroadcastAsync = "async"
+)
 
+// List of CLI flags
+const (
 	FlagHome               = tmcli.HomeFlag
 	FlagUseLedger          = "ledger"
 	FlagChainID            = "chain-id"
@@ -54,6 +64,11 @@ const (
 	FlagRPCWriteTimeout    = "write-timeout"
 	FlagOutputDocument     = "output-document" // inspired by wget -O
 	FlagSkipConfirmation   = "yes"
+	FlagProve              = "prove"
+	FlagKeyringBackend     = "keyring-backend"
+	FlagPage               = "page"
+	FlagLimit              = "limit"
+	FlagUnsafeCORS         = "unsafe-cors"
 )
 
 // LineBreak can be included in a command list to provide a blank line
@@ -77,6 +92,8 @@ func GetCommands(cmds ...*cobra.Command) []*cobra.Command {
 		viper.BindPFlag(FlagNode, c.Flags().Lookup(FlagNode))
 
 		c.MarkFlagRequired(FlagChainID)
+
+		c.SetErr(c.ErrOrStderr())
 	}
 	return cmds
 }
@@ -99,18 +116,21 @@ func PostCommands(cmds ...*cobra.Command) []*cobra.Command {
 		c.Flags().Bool(FlagDryRun, false, "ignore the --gas flag and perform a simulation of a transaction, but don't broadcast it")
 		c.Flags().Bool(FlagGenerateOnly, false, "Build an unsigned transaction and write it to STDOUT (when enabled, the local Keybase is not accessible and the node operates offline)")
 		c.Flags().BoolP(FlagSkipConfirmation, "y", false, "Skip tx broadcasting prompt confirmation")
+		c.Flags().String(FlagKeyringBackend, DefaultKeyringBackend, "Select keyring's backend (os|file|test)")
 
 		// --gas can accept integers and "simulate"
 		c.Flags().Var(&GasFlagVar, "gas", fmt.Sprintf(
 			"gas limit to set per-transaction; set to %q to calculate required gas automatically (default %d)",
 			GasFlagAuto, DefaultGasLimit,
 		))
-
 		viper.BindPFlag(FlagTrustNode, c.Flags().Lookup(FlagTrustNode))
 		viper.BindPFlag(FlagUseLedger, c.Flags().Lookup(FlagUseLedger))
 		viper.BindPFlag(FlagNode, c.Flags().Lookup(FlagNode))
+		viper.BindPFlag(FlagKeyringBackend, c.Flags().Lookup(FlagKeyringBackend))
 
 		c.MarkFlagRequired(FlagChainID)
+
+		c.SetErr(c.ErrOrStderr())
 	}
 	return cmds
 }
@@ -122,6 +142,7 @@ func RegisterRestServerFlags(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().Uint(FlagMaxOpenConnections, 1000, "The number of maximum open connections")
 	cmd.Flags().Uint(FlagRPCReadTimeout, 10, "The RPC read timeout (in seconds)")
 	cmd.Flags().Uint(FlagRPCWriteTimeout, 10, "The RPC write timeout (in seconds)")
+	cmd.Flags().Bool(FlagUnsafeCORS, false, "Allows CORS requests from all domains. For development purposes only, use it at your own risk.")
 
 	return cmd
 }

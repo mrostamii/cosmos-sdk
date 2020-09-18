@@ -93,13 +93,8 @@ func CompleteAndBroadcastTxCLI(txBldr authtypes.TxBuilder, cliCtx context.CLICon
 		}
 	}
 
-	passphrase, err := keys.GetPassphrase(fromName)
-	if err != nil {
-		return err
-	}
-
 	// build and sign the transaction
-	txBytes, err := txBldr.BuildAndSign(fromName, passphrase, msgs)
+	txBytes, err := txBldr.BuildAndSign(fromName, keys.DefaultKeyPass, msgs)
 	if err != nil {
 		return err
 	}
@@ -125,26 +120,26 @@ func EnrichWithGas(txBldr authtypes.TxBuilder, cliCtx context.CLIContext, msgs [
 }
 
 // CalculateGas simulates the execution of a transaction and returns
-// both the estimate obtained by the query and the adjusted amount.
+// the simulation response obtained by the query and the adjusted gas amount.
 func CalculateGas(
 	queryFunc func(string, []byte) ([]byte, int64, error), cdc *codec.Codec,
 	txBytes []byte, adjustment float64,
-) (estimate, adjusted uint64, err error) {
+) (sdk.SimulationResponse, uint64, error) {
 
 	// run a simulation (via /app/simulate query) to
 	// estimate gas and update TxBuilder accordingly
 	rawRes, _, err := queryFunc("/app/simulate", txBytes)
 	if err != nil {
-		return estimate, adjusted, err
+		return sdk.SimulationResponse{}, 0, err
 	}
 
-	estimate, err = parseQueryResponse(cdc, rawRes)
+	simRes, err := parseQueryResponse(cdc, rawRes)
 	if err != nil {
-		return
+		return sdk.SimulationResponse{}, 0, err
 	}
 
-	adjusted = adjustGasEstimate(estimate, adjustment)
-	return estimate, adjusted, nil
+	adjusted := adjustGasEstimate(simRes.GasUsed, adjustment)
+	return simRes, adjusted, nil
 }
 
 // PrintUnsignedStdTx builds an unsigned StdTx and prints it to os.Stdout.
@@ -154,7 +149,12 @@ func PrintUnsignedStdTx(txBldr authtypes.TxBuilder, cliCtx context.CLIContext, m
 		return err
 	}
 
-	json, err := cliCtx.Codec.MarshalJSON(stdTx)
+	var json []byte
+	if viper.GetBool(flags.FlagIndentResponse) {
+		json, err = cliCtx.Codec.MarshalJSONIndent(stdTx, "", "  ")
+	} else {
+		json, err = cliCtx.Codec.MarshalJSON(stdTx)
+	}
 	if err != nil {
 		return err
 	}
@@ -192,12 +192,7 @@ func SignStdTx(
 		}
 	}
 
-	passphrase, err := keys.GetPassphrase(name)
-	if err != nil {
-		return signedStdTx, err
-	}
-
-	return txBldr.SignStdTx(name, passphrase, stdTx, appendSig)
+	return txBldr.SignStdTx(name, keys.DefaultKeyPass, stdTx, appendSig)
 }
 
 // SignStdTxWithSignerAddress attaches a signature to a StdTx and returns a copy of a it.
@@ -219,12 +214,7 @@ func SignStdTxWithSignerAddress(txBldr authtypes.TxBuilder, cliCtx context.CLICo
 		}
 	}
 
-	passphrase, err := keys.GetPassphrase(name)
-	if err != nil {
-		return signedStdTx, err
-	}
-
-	return txBldr.SignStdTx(name, passphrase, stdTx, false)
+	return txBldr.SignStdTx(name, keys.DefaultKeyPass, stdTx, false)
 }
 
 // Read and decode a StdTx from the given filename.  Can pass "-" to read from stdin.
@@ -271,29 +261,28 @@ func GetTxEncoder(cdc *codec.Codec) (encoder sdk.TxEncoder) {
 	return encoder
 }
 
-// nolint
-// SimulateMsgs simulates the transaction and returns the gas estimate and the adjusted value.
-func simulateMsgs(txBldr authtypes.TxBuilder, cliCtx context.CLIContext, msgs []sdk.Msg) (estimated, adjusted uint64, err error) {
+// simulateMsgs simulates the transaction and returns the simulation response and
+// the adjusted gas value.
+func simulateMsgs(txBldr authtypes.TxBuilder, cliCtx context.CLIContext, msgs []sdk.Msg) (sdk.SimulationResponse, uint64, error) {
 	txBytes, err := txBldr.BuildTxForSim(msgs)
 	if err != nil {
-		return
+		return sdk.SimulationResponse{}, 0, err
 	}
 
-	estimated, adjusted, err = CalculateGas(cliCtx.QueryWithData, cliCtx.Codec, txBytes, txBldr.GasAdjustment())
-	return
+	return CalculateGas(cliCtx.QueryWithData, cliCtx.Codec, txBytes, txBldr.GasAdjustment())
 }
 
 func adjustGasEstimate(estimate uint64, adjustment float64) uint64 {
 	return uint64(adjustment * float64(estimate))
 }
 
-func parseQueryResponse(cdc *codec.Codec, rawRes []byte) (uint64, error) {
-	var simulationResult sdk.Result
-	if err := cdc.UnmarshalBinaryLengthPrefixed(rawRes, &simulationResult); err != nil {
-		return 0, err
+func parseQueryResponse(cdc *codec.Codec, rawRes []byte) (sdk.SimulationResponse, error) {
+	var simRes sdk.SimulationResponse
+	if err := cdc.UnmarshalBinaryBare(rawRes, &simRes); err != nil {
+		return sdk.SimulationResponse{}, err
 	}
 
-	return simulationResult.GasUsed, nil
+	return simRes, nil
 }
 
 // PrepareTxBuilder populates a TxBuilder in preparation for the build of a Tx.
@@ -341,7 +330,7 @@ func buildUnsignedStdTxOffline(txBldr authtypes.TxBuilder, cliCtx context.CLICon
 
 	stdSignMsg, err := txBldr.BuildSignMsg(msgs)
 	if err != nil {
-		return stdTx, nil
+		return stdTx, err
 	}
 
 	return authtypes.NewStdTx(stdSignMsg.Msgs, stdSignMsg.Fee, nil, stdSignMsg.Memo), nil

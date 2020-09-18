@@ -1,6 +1,9 @@
+// nolint
+// DONTCOVER
 package slashing
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,6 +12,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	authexported "github.com/cosmos/cosmos-sdk/x/auth/exported"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	"github.com/cosmos/cosmos-sdk/x/mock"
 	"github.com/cosmos/cosmos-sdk/x/staking"
@@ -32,7 +36,6 @@ func getMockApp(t *testing.T) (*mock.App, staking.Keeper, Keeper) {
 	supply.RegisterCodec(mapp.Cdc)
 
 	keyStaking := sdk.NewKVStoreKey(staking.StoreKey)
-	tkeyStaking := sdk.NewTransientStoreKey(staking.TStoreKey)
 	keySlashing := sdk.NewKVStoreKey(StoreKey)
 	keySupply := sdk.NewKVStoreKey(supply.StoreKey)
 
@@ -41,19 +44,19 @@ func getMockApp(t *testing.T) (*mock.App, staking.Keeper, Keeper) {
 	bondPool := supply.NewEmptyModuleAccount(types.BondedPoolName, supply.Burner, supply.Staking)
 
 	blacklistedAddrs := make(map[string]bool)
-	blacklistedAddrs[feeCollector.String()] = true
-	blacklistedAddrs[notBondedPool.String()] = true
-	blacklistedAddrs[bondPool.String()] = true
+	blacklistedAddrs[feeCollector.GetAddress().String()] = true
+	blacklistedAddrs[notBondedPool.GetAddress().String()] = true
+	blacklistedAddrs[bondPool.GetAddress().String()] = true
 
-	bankKeeper := bank.NewBaseKeeper(mapp.AccountKeeper, mapp.ParamsKeeper.Subspace(bank.DefaultParamspace), bank.DefaultCodespace, blacklistedAddrs)
+	bankKeeper := bank.NewBaseKeeper(mapp.AccountKeeper, mapp.ParamsKeeper.Subspace(bank.DefaultParamspace), blacklistedAddrs)
 	maccPerms := map[string][]string{
 		auth.FeeCollectorName:     nil,
-		staking.NotBondedPoolName: []string{supply.Burner, supply.Staking},
-		staking.BondedPoolName:    []string{supply.Burner, supply.Staking},
+		staking.NotBondedPoolName: {supply.Burner, supply.Staking},
+		staking.BondedPoolName:    {supply.Burner, supply.Staking},
 	}
 	supplyKeeper := supply.NewKeeper(mapp.Cdc, keySupply, mapp.AccountKeeper, bankKeeper, maccPerms)
-	stakingKeeper := staking.NewKeeper(mapp.Cdc, keyStaking, tkeyStaking, supplyKeeper, mapp.ParamsKeeper.Subspace(staking.DefaultParamspace), staking.DefaultCodespace)
-	keeper := NewKeeper(mapp.Cdc, keySlashing, stakingKeeper, mapp.ParamsKeeper.Subspace(DefaultParamspace), DefaultCodespace)
+	stakingKeeper := staking.NewKeeper(mapp.Cdc, keyStaking, supplyKeeper, mapp.ParamsKeeper.Subspace(staking.DefaultParamspace))
+	keeper := NewKeeper(mapp.Cdc, keySlashing, stakingKeeper, mapp.ParamsKeeper.Subspace(DefaultParamspace))
 	mapp.Router().AddRoute(staking.RouterKey, staking.NewHandler(stakingKeeper))
 	mapp.Router().AddRoute(RouterKey, NewHandler(keeper))
 
@@ -61,7 +64,7 @@ func getMockApp(t *testing.T) (*mock.App, staking.Keeper, Keeper) {
 	mapp.SetInitChainer(getInitChainer(mapp, stakingKeeper, mapp.AccountKeeper, supplyKeeper,
 		[]supplyexported.ModuleAccountI{feeCollector, notBondedPool, bondPool}))
 
-	require.NoError(t, mapp.CompleteSetup(keyStaking, tkeyStaking, keySupply, keySlashing))
+	require.NoError(t, mapp.CompleteSetup(keyStaking, keySupply, keySlashing))
 
 	return mapp, stakingKeeper, keeper
 }
@@ -105,7 +108,7 @@ func checkValidator(t *testing.T, mapp *mock.App, keeper staking.Keeper,
 func checkValidatorSigningInfo(t *testing.T, mapp *mock.App, keeper Keeper,
 	addr sdk.ConsAddress, expFound bool) ValidatorSigningInfo {
 	ctxCheck := mapp.BaseApp.NewContext(true, abci.Header{})
-	signingInfo, found := keeper.getValidatorSigningInfo(ctxCheck, addr)
+	signingInfo, found := keeper.GetValidatorSigningInfo(ctxCheck, addr)
 	require.Equal(t, expFound, found)
 	return signingInfo
 }
@@ -122,10 +125,10 @@ func TestSlashingMsgs(t *testing.T) {
 		Address: addr1,
 		Coins:   sdk.Coins{genCoin},
 	}
-	accs := []auth.Account{acc1}
+	accs := []authexported.Account{acc1}
 	mock.SetGenesis(mapp, accs)
 
-	description := staking.NewDescription("foo_moniker", "", "", "")
+	description := staking.NewDescription("foo_moniker", "", "", "", "")
 	commission := staking.NewCommissionRates(sdk.ZeroDec(), sdk.ZeroDec(), sdk.ZeroDec())
 
 	createValidatorMsg := staking.NewMsgCreateValidator(
@@ -150,7 +153,8 @@ func TestSlashingMsgs(t *testing.T) {
 
 	// unjail should fail with unknown validator
 	header = abci.Header{Height: mapp.LastBlockHeight() + 1}
-	res := mock.SignCheckDeliver(t, mapp.Cdc, mapp.BaseApp, header, []sdk.Msg{unjailMsg}, []uint64{0}, []uint64{1}, false, false, priv1)
-	require.EqualValues(t, CodeValidatorNotJailed, res.Code)
-	require.EqualValues(t, DefaultCodespace, res.Codespace)
+	_, res, err := mock.SignCheckDeliver(t, mapp.Cdc, mapp.BaseApp, header, []sdk.Msg{unjailMsg}, []uint64{0}, []uint64{1}, false, false, priv1)
+	require.Error(t, err)
+	require.Nil(t, res)
+	require.True(t, errors.Is(ErrValidatorNotJailed, err))
 }

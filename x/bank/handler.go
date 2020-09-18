@@ -1,16 +1,15 @@
 package bank
 
 import (
-	"fmt"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/cosmos-sdk/x/bank/internal/keeper"
 	"github.com/cosmos/cosmos-sdk/x/bank/internal/types"
 )
 
 // NewHandler returns a handler for "bank" type messages.
 func NewHandler(k keeper.Keeper) sdk.Handler {
-	return func(ctx sdk.Context, msg sdk.Msg) sdk.Result {
+	return func(ctx sdk.Context, msg sdk.Msg) (*sdk.Result, error) {
 		ctx = ctx.WithEventManager(sdk.NewEventManager())
 
 		switch msg := msg.(type) {
@@ -21,16 +20,19 @@ func NewHandler(k keeper.Keeper) sdk.Handler {
 			return handleMsgMultiSend(ctx, k, msg)
 
 		default:
-			errMsg := fmt.Sprintf("unrecognized bank message type: %T", msg)
-			return sdk.ErrUnknownRequest(errMsg).Result()
+			return nil, sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "unrecognized bank message type: %T", msg)
 		}
 	}
 }
 
 // Handle MsgSend.
-func handleMsgSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgSend) sdk.Result {
+func handleMsgSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgSend) (*sdk.Result, error) {
 	if !k.GetSendEnabled(ctx) {
-		return types.ErrSendDisabled(k.Codespace()).Result()
+		return nil, types.ErrSendDisabled
+	}
+
+	if k.BlacklistedAddr(msg.ToAddress) {
+		return nil, sdkerrors.Wrapf(sdkerrors.ErrUnauthorized, "%s is not allowed to receive transactions", msg.ToAddress)
 	}
 
 	if k.BlacklistedAddr(msg.ToAddress) {
@@ -39,7 +41,7 @@ func handleMsgSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgSend) sdk.Resu
 
 	err := k.SendCoins(ctx, msg.FromAddress, msg.ToAddress, msg.Amount)
 	if err != nil {
-		return err.Result()
+		return nil, err
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -49,14 +51,20 @@ func handleMsgSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgSend) sdk.Resu
 		),
 	)
 
-	return sdk.Result{Events: ctx.EventManager().Events()}
+	return &sdk.Result{Events: ctx.EventManager().Events()}, nil
 }
 
 // Handle MsgMultiSend.
-func handleMsgMultiSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgMultiSend) sdk.Result {
+func handleMsgMultiSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgMultiSend) (*sdk.Result, error) {
 	// NOTE: totalIn == totalOut should already have been checked
 	if !k.GetSendEnabled(ctx) {
-		return types.ErrSendDisabled(k.Codespace()).Result()
+		return nil, types.ErrSendDisabled
+	}
+
+	for _, out := range msg.Outputs {
+		if k.BlacklistedAddr(out.Address) {
+			return nil, sdkerrors.Wrapf(sdkerrors.ErrUnauthorized, "%s is not allowed to receive transactions", out.Address)
+		}
 	}
 
 	for _, out := range msg.Outputs {
@@ -67,7 +75,7 @@ func handleMsgMultiSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgMultiSend
 
 	err := k.InputOutputCoins(ctx, msg.Inputs, msg.Outputs)
 	if err != nil {
-		return err.Result()
+		return nil, err
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -77,5 +85,5 @@ func handleMsgMultiSend(ctx sdk.Context, k keeper.Keeper, msg types.MsgMultiSend
 		),
 	)
 
-	return sdk.Result{Events: ctx.EventManager().Events()}
+	return &sdk.Result{Events: ctx.EventManager().Events()}, nil
 }

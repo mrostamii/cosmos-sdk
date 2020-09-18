@@ -4,7 +4,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 )
 
-// module codec
 var ModuleCdc = codec.New()
 
 // RegisterCodec registers all the necessary types and interfaces for
@@ -17,7 +16,6 @@ func RegisterCodec(cdc *codec.Codec) {
 	cdc.RegisterConcrete(MsgVote{}, "cosmos-sdk/MsgVote", nil)
 
 	cdc.RegisterConcrete(TextProposal{}, "cosmos-sdk/TextProposal", nil)
-	cdc.RegisterConcrete(SoftwareUpgradeProposal{}, "cosmos-sdk/SoftwareUpgradeProposal", nil)
 }
 
 // RegisterProposalTypeCodec registers an external proposal content type defined

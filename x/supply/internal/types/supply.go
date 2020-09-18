@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/supply/exported"
@@ -40,7 +40,7 @@ func DefaultSupply() exported.SupplyI {
 
 // Inflate adds coins to the total supply
 func (supply Supply) Inflate(amount sdk.Coins) exported.SupplyI {
-	supply.Total = supply.Total.Add(amount)
+	supply.Total = supply.Total.Add(amount...)
 	return supply
 }
 

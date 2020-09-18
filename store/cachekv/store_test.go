@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	cmn "github.com/tendermint/tendermint/libs/common"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/cosmos/cosmos-sdk/store/cachekv"
@@ -14,7 +14,7 @@ import (
 )
 
 func newCacheKVStore() types.CacheKVStore {
-	mem := dbadapter.Store{dbm.NewMemDB()}
+	mem := dbadapter.Store{DB: dbm.NewMemDB()}
 	return cachekv.NewStore(mem)
 }
 
@@ -22,7 +22,7 @@ func keyFmt(i int) []byte { return bz(fmt.Sprintf("key%0.8d", i)) }
 func valFmt(i int) []byte { return bz(fmt.Sprintf("value%0.8d", i)) }
 
 func TestCacheKVStore(t *testing.T) {
-	mem := dbadapter.Store{dbm.NewMemDB()}
+	mem := dbadapter.Store{DB: dbm.NewMemDB()}
 	st := cachekv.NewStore(mem)
 
 	require.Empty(t, st.Get(keyFmt(1)), "Expected `key1` to be empty")
@@ -65,13 +65,13 @@ func TestCacheKVStore(t *testing.T) {
 }
 
 func TestCacheKVStoreNoNilSet(t *testing.T) {
-	mem := dbadapter.Store{dbm.NewMemDB()}
+	mem := dbadapter.Store{DB: dbm.NewMemDB()}
 	st := cachekv.NewStore(mem)
 	require.Panics(t, func() { st.Set([]byte("key"), nil) }, "setting a nil value should panic")
 }
 
 func TestCacheKVStoreNested(t *testing.T) {
-	mem := dbadapter.Store{dbm.NewMemDB()}
+	mem := dbadapter.Store{DB: dbm.NewMemDB()}
 	st := cachekv.NewStore(mem)
 
 	// set. check its there on st and not on mem.
@@ -318,7 +318,7 @@ const (
 )
 
 func randInt(n int) int {
-	return cmn.RandInt() % n
+	return tmrand.NewRand().Int() % n
 }
 
 // useful for replaying a error case if we find one
@@ -387,7 +387,8 @@ func assertIterateDomain(t *testing.T, st types.KVStore, expectedN int) {
 func assertIterateDomainCheck(t *testing.T, st types.KVStore, mem dbm.DB, r []keyRange) {
 	// iterate over each and check they match the other
 	itr := st.Iterator(nil, nil)
-	itr2 := mem.Iterator(nil, nil) // ground truth
+	itr2, err := mem.Iterator(nil, nil) // ground truth
+	require.NoError(t, err)
 
 	krc := newKeyRangeCounter(r)
 	i := 0
@@ -417,7 +418,8 @@ func assertIterateDomainCheck(t *testing.T, st types.KVStore, mem dbm.DB, r []ke
 func assertIterateDomainCompare(t *testing.T, st types.KVStore, mem dbm.DB) {
 	// iterate over each and check they match the other
 	itr := st.Iterator(nil, nil)
-	itr2 := mem.Iterator(nil, nil) // ground truth
+	itr2, err := mem.Iterator(nil, nil) // ground truth
+	require.NoError(t, err)
 	checkIterators(t, itr, itr2)
 	checkIterators(t, itr2, itr)
 }

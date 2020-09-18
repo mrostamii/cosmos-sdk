@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	tmclient "github.com/tendermint/tendermint/rpc/client"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-	rpcclient "github.com/tendermint/tendermint/rpc/lib/client"
+	tmjsonrpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 )
@@ -27,12 +26,16 @@ func WaitForNextHeightTM(port string) {
 // Wait for N tendermint blocks to pass using the Tendermint RPC
 // on localhost
 func WaitForNextNBlocksTM(n int64, port string) {
-
 	// get the latest block and wait for n more
 	url := fmt.Sprintf("http://localhost:%v", port)
-	cl := tmclient.NewHTTP(url, "/websocket")
-	resBlock, err := cl.Block(nil)
+	cl, err := rpchttp.New(url, "/websocket")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create Tendermint HTTP client: %s", err))
+	}
+
 	var height int64
+
+	resBlock, err := cl.Block(nil)
 	if err != nil || resBlock.Block == nil {
 		// wait for the first block to exist
 		WaitForHeightTM(1, port)
@@ -40,6 +43,7 @@ func WaitForNextNBlocksTM(n int64, port string) {
 	} else {
 		height = resBlock.Block.Height + n
 	}
+
 	waitForHeightTM(height, url)
 }
 
@@ -51,7 +55,11 @@ func WaitForHeightTM(height int64, port string) {
 }
 
 func waitForHeightTM(height int64, url string) {
-	cl := tmclient.NewHTTP(url, "/websocket")
+	cl, err := rpchttp.New(url, "/websocket")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create Tendermint HTTP client: %s", err))
+	}
+
 	for {
 		// get url, try a few times
 		var resBlock *ctypes.ResultBlock
@@ -99,7 +107,7 @@ func waitForHeight(height int64, url string) {
 
 	for {
 		// Since this is in a testing file we are accepting nolint to be passed
-		res, err = http.Get(url) //nolint:gosec
+		res, err = http.Get(url) // nolint:gosec
 		if err != nil {
 			panic(err)
 		}
@@ -151,7 +159,7 @@ func WaitForStart(url string) {
 		time.Sleep(time.Millisecond * 100)
 
 		var res *http.Response
-		res, err = http.Get(url) //nolint:gosec Error is arising in testing files, accepting nolint
+		res, err = http.Get(url) // nolint:gosec
 		if err != nil || res == nil {
 			continue
 		}
@@ -171,13 +179,14 @@ func WaitForStart(url string) {
 	panic(err)
 }
 
-// TODO: these functions just print to Stdout.
-// consider using the logger.
-
 // Wait for the RPC server to respond to /status
 func WaitForRPC(laddr string) {
 	fmt.Println("LADDR", laddr)
-	client := rpcclient.NewJSONRPCClient(laddr)
+	client, err := tmjsonrpc.New(laddr)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create Tendermint RPC client: %s", err))
+	}
+
 	ctypes.RegisterAmino(client.Codec())
 	result := new(ctypes.ResultStatus)
 	for {

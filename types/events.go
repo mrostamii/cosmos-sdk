@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	cmn "github.com/tendermint/tendermint/libs/common"
+	tmkv "github.com/tendermint/tendermint/libs/kv"
 )
 
 // ----------------------------------------------------------------------------
@@ -65,7 +65,7 @@ func NewEvent(ty string, attrs ...Attribute) Event {
 	e := Event{Type: ty}
 
 	for _, attr := range attrs {
-		e.Attributes = append(e.Attributes, NewAttribute(attr.Key, attr.Value).ToKVPair())
+		e.Attributes = append(e.Attributes, attr.ToKVPair())
 	}
 
 	return e
@@ -86,8 +86,8 @@ func (a Attribute) String() string {
 }
 
 // ToKVPair converts an Attribute object into a Tendermint key/value pair.
-func (a Attribute) ToKVPair() cmn.KVPair {
-	return cmn.KVPair{Key: toBytes(a.Key), Value: toBytes(a.Value)}
+func (a Attribute) ToKVPair() tmkv.Pair {
+	return tmkv.Pair{Key: toBytes(a.Key), Value: toBytes(a.Value)}
 }
 
 // AppendAttributes adds one or more attributes to an Event.
@@ -111,7 +111,7 @@ func (e Events) AppendEvents(events Events) Events {
 // ToABCIEvents converts a slice of Event objects to a slice of abci.Event
 // objects.
 func (e Events) ToABCIEvents() []abci.Event {
-	res := make([]abci.Event, len(e), len(e))
+	res := make([]abci.Event, len(e))
 	for i, ev := range e {
 		res[i] = abci.Event{Type: ev.Type, Attributes: ev.Attributes}
 	}
@@ -174,11 +174,8 @@ func (se StringEvents) Flatten() StringEvents {
 	for _, e := range se {
 		flatEvents[e.Type] = append(flatEvents[e.Type], e.Attributes...)
 	}
-
-	var (
-		res  StringEvents
-		keys []string
-	)
+	keys := make([]string, 0, len(flatEvents))
+	res := make(StringEvents, 0, len(flatEvents)) // appeneded to keys, same length of what is allocated to keys
 
 	for ty := range flatEvents {
 		keys = append(keys, ty)
@@ -209,7 +206,7 @@ func StringifyEvent(e abci.Event) StringEvent {
 // StringifyEvents converts a slice of Event objects into a slice of StringEvent
 // objects.
 func StringifyEvents(events []abci.Event) StringEvents {
-	var res StringEvents
+	res := make(StringEvents, 0, len(events))
 
 	for _, e := range events {
 		res = append(res, StringifyEvent(e))

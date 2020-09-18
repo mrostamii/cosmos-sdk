@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/context"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/version"
@@ -27,7 +29,6 @@ const (
 	flagVoter        = "voter"
 	flagDepositor    = "depositor"
 	flagStatus       = "status"
-	flagNumLimit     = "limit"
 	FlagProposal     = "proposal"
 )
 
@@ -64,10 +65,10 @@ func GetTxCmd(storeKey string, cdc *codec.Codec, pcmds []*cobra.Command) *cobra.
 
 	cmdSubmitProp := GetCmdSubmitProposal(cdc)
 	for _, pcmd := range pcmds {
-		cmdSubmitProp.AddCommand(client.PostCommands(pcmd)[0])
+		cmdSubmitProp.AddCommand(flags.PostCommands(pcmd)[0])
 	}
 
-	govTxCmd.AddCommand(client.PostCommands(
+	govTxCmd.AddCommand(flags.PostCommands(
 		GetCmdDeposit(cdc),
 		GetCmdVote(cdc),
 		cmdSubmitProp,
@@ -105,8 +106,9 @@ $ %s tx gov submit-proposal --title="Test Proposal" --description="My awesome pr
 			),
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
-			cliCtx := context.NewCLIContext().WithCodec(cdc)
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(utils.GetTxEncoder(cdc))
+			cliCtx := context.NewCLIContextWithInput(inBuf).WithCodec(cdc)
 
 			proposal, err := parseSubmitProposalFlags()
 			if err != nil {
@@ -155,8 +157,9 @@ $ %s tx gov deposit 1 10stake --from mykey
 			),
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
-			cliCtx := context.NewCLIContext().WithCodec(cdc)
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(utils.GetTxEncoder(cdc))
+			cliCtx := context.NewCLIContextWithInput(inBuf).WithCodec(cdc)
 
 			// validate that the proposal id is a uint
 			proposalID, err := strconv.ParseUint(args[0], 10, 64)
@@ -202,8 +205,9 @@ $ %s tx gov vote 1 yes --from mykey
 			),
 		),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
-			cliCtx := context.NewCLIContext().WithCodec(cdc)
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(utils.GetTxEncoder(cdc))
+			cliCtx := context.NewCLIContextWithInput(inBuf).WithCodec(cdc)
 
 			// Get voting address
 			from := cliCtx.GetFromAddress()

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tendermint/go-amino"
+	amino "github.com/tendermint/go-amino"
 	cryptoamino "github.com/tendermint/tendermint/crypto/encoding/amino"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -54,7 +54,7 @@ func MustMarshalJSONIndent(cdc *Codec, obj interface{}) []byte {
 
 //__________________________________________________________________
 
-// generic sealed codec to be used throughout sdk
+// Cdc generic sealed codec to be used throughout sdk
 var Cdc *Codec
 
 func init() {

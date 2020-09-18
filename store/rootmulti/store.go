@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/pkg/errors"
+	iavltree "github.com/tendermint/iavl"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/crypto/tmhash"
@@ -12,15 +14,16 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/store/cachemulti"
 	"github.com/cosmos/cosmos-sdk/store/dbadapter"
-	"github.com/cosmos/cosmos-sdk/store/errors"
 	"github.com/cosmos/cosmos-sdk/store/iavl"
 	"github.com/cosmos/cosmos-sdk/store/tracekv"
 	"github.com/cosmos/cosmos-sdk/store/transient"
 	"github.com/cosmos/cosmos-sdk/store/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 const (
 	latestVersionKey = "s/latest"
+	pruneHeightsKey  = "s/pruneheights"
 	commitInfoKeyFmt = "s/%d" // s/<version>
 )
 
@@ -28,37 +31,46 @@ const (
 // cacheMultiStore which is for cache-wrapping other MultiStores. It implements
 // the CommitMultiStore interface.
 type Store struct {
-	db           dbm.DB
-	lastCommitID types.CommitID
-	pruningOpts  types.PruningOptions
-	storesParams map[types.StoreKey]storeParams
-	stores       map[types.StoreKey]types.CommitStore
-	keysByName   map[string]types.StoreKey
-	lazyLoading  bool
+	db             dbm.DB
+	lastCommitInfo commitInfo
+	pruningOpts    types.PruningOptions
+	storesParams   map[types.StoreKey]storeParams
+	stores         map[types.StoreKey]types.CommitKVStore
+	keysByName     map[string]types.StoreKey
+	lazyLoading    bool
+	pruneHeights   []int64
 
 	traceWriter  io.Writer
 	traceContext types.TraceContext
+
+	interBlockCache types.MultiStorePersistentCache
 }
 
-var _ types.CommitMultiStore = (*Store)(nil)
-var _ types.Queryable = (*Store)(nil)
+var (
+	_ types.CommitMultiStore = (*Store)(nil)
+	_ types.Queryable        = (*Store)(nil)
+)
 
-// nolint
+// NewStore returns a reference to a new Store object with the provided DB. The
+// store will be created with a PruneNothing pruning strategy by default. After
+// a store is created, KVStores must be mounted and finally LoadLatestVersion or
+// LoadVersion must be called.
 func NewStore(db dbm.DB) *Store {
 	return &Store{
 		db:           db,
+		pruningOpts:  types.PruneNothing,
 		storesParams: make(map[types.StoreKey]storeParams),
-		stores:       make(map[types.StoreKey]types.CommitStore),
+		stores:       make(map[types.StoreKey]types.CommitKVStore),
 		keysByName:   make(map[string]types.StoreKey),
+		pruneHeights: make([]int64, 0),
 	}
 }
 
-// Implements CommitMultiStore
+// SetPruning sets the pruning strategy on the root store and all the sub-stores.
+// Note, calling SetPruning on the root store prior to LoadVersion or
+// LoadLatestVersion performs a no-op as the stores aren't mounted yet.
 func (rs *Store) SetPruning(pruningOpts types.PruningOptions) {
 	rs.pruningOpts = pruningOpts
-	for _, substore := range rs.stores {
-		substore.SetPruning(pruningOpts)
-	}
 }
 
 // SetLazyLoading sets if the iavl store should be loaded lazily or not
@@ -90,73 +102,157 @@ func (rs *Store) MountStoreWithDB(key types.StoreKey, typ types.StoreType, db db
 	rs.keysByName[key.Name()] = key
 }
 
-// Implements CommitMultiStore.
+// GetCommitStore returns a mounted CommitStore for a given StoreKey. If the
+// store is wrapped in an inter-block cache, it will be unwrapped before returning.
 func (rs *Store) GetCommitStore(key types.StoreKey) types.CommitStore {
+	return rs.GetCommitKVStore(key)
+}
+
+// GetCommitKVStore returns a mounted CommitKVStore for a given StoreKey. If the
+// store is wrapped in an inter-block cache, it will be unwrapped before returning.
+func (rs *Store) GetCommitKVStore(key types.StoreKey) types.CommitKVStore {
+	// If the Store has an inter-block cache, first attempt to lookup and unwrap
+	// the underlying CommitKVStore by StoreKey. If it does not exist, fallback to
+	// the main mapping of CommitKVStores.
+	if rs.interBlockCache != nil {
+		if store := rs.interBlockCache.Unwrap(key); store != nil {
+			return store
+		}
+	}
+
 	return rs.stores[key]
 }
 
-// Implements CommitMultiStore.
-func (rs *Store) GetCommitKVStore(key types.StoreKey) types.CommitKVStore {
-	return rs.stores[key].(types.CommitKVStore)
+// LoadLatestVersionAndUpgrade implements CommitMultiStore
+func (rs *Store) LoadLatestVersionAndUpgrade(upgrades *types.StoreUpgrades) error {
+	ver := getLatestVersion(rs.db)
+	return rs.loadVersion(ver, upgrades)
 }
 
-// Implements CommitMultiStore.
+// LoadVersionAndUpgrade allows us to rename substores while loading an older version
+func (rs *Store) LoadVersionAndUpgrade(ver int64, upgrades *types.StoreUpgrades) error {
+	return rs.loadVersion(ver, upgrades)
+}
+
+// LoadLatestVersion implements CommitMultiStore.
 func (rs *Store) LoadLatestVersion() error {
 	ver := getLatestVersion(rs.db)
-	return rs.LoadVersion(ver)
+	return rs.loadVersion(ver, nil)
 }
 
-// Implements CommitMultiStore.
+// LoadVersion implements CommitMultiStore.
 func (rs *Store) LoadVersion(ver int64) error {
-	if ver == 0 {
-		// Special logic for version 0 where there is no need to get commit
-		// information.
-		for key, storeParams := range rs.storesParams {
-			store, err := rs.loadCommitStoreFromParams(key, types.CommitID{}, storeParams)
-			if err != nil {
-				return fmt.Errorf("failed to load Store: %v", err)
-			}
+	return rs.loadVersion(ver, nil)
+}
 
-			rs.stores[key] = store
+func (rs *Store) loadVersion(ver int64, upgrades *types.StoreUpgrades) error {
+	infos := make(map[string]storeInfo)
+	var cInfo commitInfo
+
+	// load old data if we are not version 0
+	if ver != 0 {
+		var err error
+		cInfo, err = getCommitInfo(rs.db, ver)
+		if err != nil {
+			return err
 		}
 
-		rs.lastCommitID = types.CommitID{}
-		return nil
+		// convert StoreInfos slice to map
+		for _, storeInfo := range cInfo.StoreInfos {
+			infos[storeInfo.Name] = storeInfo
+		}
 	}
 
-	cInfo, err := getCommitInfo(rs.db, ver)
-	if err != nil {
-		return err
-	}
-
-	// convert StoreInfos slice to map
-	infos := make(map[types.StoreKey]storeInfo)
-	for _, storeInfo := range cInfo.StoreInfos {
-		infos[rs.nameToKey(storeInfo.Name)] = storeInfo
-	}
-
-	// load each Store
-	var newStores = make(map[types.StoreKey]types.CommitStore)
+	// load each Store (note this doesn't panic on unmounted keys now)
+	var newStores = make(map[types.StoreKey]types.CommitKVStore)
 	for key, storeParams := range rs.storesParams {
-		var id types.CommitID
-
-		info, ok := infos[key]
-		if ok {
-			id = info.Core.CommitID
-		}
-
-		store, err := rs.loadCommitStoreFromParams(key, id, storeParams)
+		// Load it
+		store, err := rs.loadCommitStoreFromParams(key, rs.getCommitID(infos, key.Name()), storeParams)
 		if err != nil {
 			return fmt.Errorf("failed to load Store: %v", err)
 		}
-
 		newStores[key] = store
+
+		// If it was deleted, remove all data
+		if upgrades.IsDeleted(key.Name()) {
+			if err := deleteKVStore(store.(types.KVStore)); err != nil {
+				return fmt.Errorf("failed to delete store %s: %v", key.Name(), err)
+			}
+		} else if oldName := upgrades.RenamedFrom(key.Name()); oldName != "" {
+			// handle renames specially
+			// make an unregistered key to satify loadCommitStore params
+			oldKey := types.NewKVStoreKey(oldName)
+			oldParams := storeParams
+			oldParams.key = oldKey
+
+			// load from the old name
+			oldStore, err := rs.loadCommitStoreFromParams(oldKey, rs.getCommitID(infos, oldName), oldParams)
+			if err != nil {
+				return fmt.Errorf("failed to load old Store '%s': %v", oldName, err)
+			}
+
+			// move all data
+			if err := moveKVStoreData(oldStore.(types.KVStore), store.(types.KVStore)); err != nil {
+				return fmt.Errorf("failed to move store %s -> %s: %v", oldName, key.Name(), err)
+			}
+		}
 	}
 
-	rs.lastCommitID = cInfo.CommitID()
+	rs.lastCommitInfo = cInfo
 	rs.stores = newStores
 
+	// load any pruned heights we missed from disk to be pruned on the next run
+	ph, err := getPruningHeights(rs.db)
+	if err == nil && len(ph) > 0 {
+		rs.pruneHeights = ph
+	}
+
 	return nil
+}
+
+func (rs *Store) getCommitID(infos map[string]storeInfo, name string) types.CommitID {
+	info, ok := infos[name]
+	if !ok {
+		return types.CommitID{}
+	}
+	return info.Core.CommitID
+}
+
+func deleteKVStore(kv types.KVStore) error {
+	// Note that we cannot write while iterating, so load all keys here, delete below
+	var keys [][]byte
+	itr := kv.Iterator(nil, nil)
+	for itr.Valid() {
+		keys = append(keys, itr.Key())
+		itr.Next()
+	}
+	itr.Close()
+
+	for _, k := range keys {
+		kv.Delete(k)
+	}
+	return nil
+}
+
+// we simulate move by a copy and delete
+func moveKVStoreData(oldDB types.KVStore, newDB types.KVStore) error {
+	// we read from one and write to another
+	itr := oldDB.Iterator(nil, nil)
+	for itr.Valid() {
+		newDB.Set(itr.Key(), itr.Value())
+		itr.Next()
+	}
+	itr.Close()
+
+	// then delete the old store
+	return deleteKVStore(oldDB)
+}
+
+// SetInterBlockCache sets the Store's internal inter-block (persistent) cache.
+// When this is defined, all CommitKVStores will be wrapped with their respective
+// inter-block cache.
+func (rs *Store) SetInterBlockCache(c types.MultiStorePersistentCache) {
+	rs.interBlockCache = c
 }
 
 // SetTracer sets the tracer for the MultiStore that the underlying
@@ -192,30 +288,64 @@ func (rs *Store) TracingEnabled() bool {
 
 // Implements Committer/CommitStore.
 func (rs *Store) LastCommitID() types.CommitID {
-	return rs.lastCommitID
+	return rs.lastCommitInfo.CommitID()
 }
 
 // Implements Committer/CommitStore.
 func (rs *Store) Commit() types.CommitID {
+	previousHeight := rs.lastCommitInfo.Version
+	version := previousHeight + 1
+	rs.lastCommitInfo = commitStores(version, rs.stores)
 
-	// Commit stores.
-	version := rs.lastCommitID.Version + 1
-	commitInfo := commitStores(version, rs.stores)
-
-	// Need to update atomically.
-	batch := rs.db.NewBatch()
-	defer batch.Close()
-	setCommitInfo(batch, version, commitInfo)
-	setLatestVersion(batch, version)
-	batch.Write()
-
-	// Prepare for next version.
-	commitID := types.CommitID{
-		Version: version,
-		Hash:    commitInfo.Hash(),
+	// Determine if pruneHeight height needs to be added to the list of heights to
+	// be pruned, where pruneHeight = (commitHeight - 1) - KeepRecent.
+	if int64(rs.pruningOpts.KeepRecent) < previousHeight {
+		pruneHeight := previousHeight - int64(rs.pruningOpts.KeepRecent)
+		// We consider this height to be pruned iff:
+		//
+		// - KeepEvery is zero as that means that all heights should be pruned.
+		// - KeepEvery % (height - KeepRecent) != 0 as that means the height is not
+		// a 'snapshot' height.
+		if rs.pruningOpts.KeepEvery == 0 || pruneHeight%int64(rs.pruningOpts.KeepEvery) != 0 {
+			rs.pruneHeights = append(rs.pruneHeights, pruneHeight)
+		}
 	}
-	rs.lastCommitID = commitID
-	return commitID
+
+	// batch prune if the current height is a pruning interval height
+	if rs.pruningOpts.Interval > 0 && version%int64(rs.pruningOpts.Interval) == 0 {
+		rs.pruneStores()
+	}
+
+	flushMetadata(rs.db, version, rs.lastCommitInfo, rs.pruneHeights)
+
+	return types.CommitID{
+		Version: version,
+		Hash:    rs.lastCommitInfo.Hash(),
+	}
+}
+
+// pruneStores will batch delete a list of heights from each mounted sub-store.
+// Afterwards, pruneHeights is reset.
+func (rs *Store) pruneStores() {
+	if len(rs.pruneHeights) == 0 {
+		return
+	}
+
+	for key, store := range rs.stores {
+		if store.GetStoreType() == types.StoreTypeIAVL {
+			// If the store is wrapped with an inter-block cache, we must first unwrap
+			// it to get the underlying IAVL store.
+			store = rs.GetCommitKVStore(key)
+
+			if err := store.(*iavl.Store).DeleteVersions(rs.pruneHeights...); err != nil {
+				if errCause := errors.Cause(err); errCause != nil && errCause != iavltree.ErrVersionDoesNotExist {
+					panic(err)
+				}
+			}
+		}
+	}
+
+	rs.pruneHeights = make([]int64, 0)
 }
 
 // Implements CacheWrapper/Store/CommitStore.
@@ -231,7 +361,8 @@ func (rs *Store) CacheWrapWithTrace(_ io.Writer, _ types.TraceContext) types.Cac
 //----------------------------------------
 // +MultiStore
 
-// Implements MultiStore.
+// CacheMultiStore cache-wraps the multi-store and returns a CacheMultiStore.
+// It implements the MultiStore interface.
 func (rs *Store) CacheMultiStore() types.CacheMultiStore {
 	stores := make(map[types.StoreKey]types.CacheWrapper)
 	for k, v := range rs.stores {
@@ -250,6 +381,10 @@ func (rs *Store) CacheMultiStoreWithVersion(version int64) (types.CacheMultiStor
 	for key, store := range rs.stores {
 		switch store.GetStoreType() {
 		case types.StoreTypeIAVL:
+			// If the store is wrapped with an inter-block cache, we must first unwrap
+			// it to get the underlying IAVL store.
+			store = rs.GetCommitKVStore(key)
+
 			// Attempt to lazy-load an already saved IAVL store version. If the
 			// version does not exist or is pruned, an error should be returned.
 			iavlStore, err := store.(*iavl.Store).GetImmutable(version)
@@ -267,20 +402,27 @@ func (rs *Store) CacheMultiStoreWithVersion(version int64) (types.CacheMultiStor
 	return cachemulti.NewStore(rs.db, cachedStores, rs.keysByName, rs.traceWriter, rs.traceContext), nil
 }
 
-// Implements MultiStore.
-// If the store does not exist, panics.
+// GetStore returns a mounted Store for a given StoreKey. If the StoreKey does
+// not exist, it will panic. If the Store is wrapped in an inter-block cache, it
+// will be unwrapped prior to being returned.
+//
+// TODO: This isn't used directly upstream. Consider returning the Store as-is
+// instead of unwrapping.
 func (rs *Store) GetStore(key types.StoreKey) types.Store {
-	store := rs.stores[key]
+	store := rs.GetCommitKVStore(key)
 	if store == nil {
-		panic("Could not load store " + key.String())
+		panic(fmt.Sprintf("store does not exist for key: %s", key.Name()))
 	}
+
 	return store
 }
 
-// GetKVStore implements the MultiStore interface. If tracing is enabled on the
-// Store, a wrapped TraceKVStore will be returned with the given
-// tracer, otherwise, the original KVStore will be returned.
-// If the store does not exist, panics.
+// GetKVStore returns a mounted KVStore for a given StoreKey. If tracing is
+// enabled on the KVStore, a wrapped TraceKVStore will be returned with the root
+// store's tracer, otherwise, the original KVStore will be returned.
+//
+// NOTE: The returned KVStore may be wrapped in an inter-block cache if it is
+// set on the root store.
 func (rs *Store) GetKVStore(key types.StoreKey) types.KVStore {
 	store := rs.stores[key].(types.KVStore)
 
@@ -291,19 +433,17 @@ func (rs *Store) GetKVStore(key types.StoreKey) types.KVStore {
 	return store
 }
 
-// Implements MultiStore
-
-// getStoreByName will first convert the original name to
-// a special key, before looking up the CommitStore.
-// This is not exposed to the extensions (which will need the
-// StoreKey), but is useful in main, and particularly app.Query,
-// in order to convert human strings into CommitStores.
+// getStoreByName performs a lookup of a StoreKey given a store name typically
+// provided in a path. The StoreKey is then used to perform a lookup and return
+// a Store. If the Store is wrapped in an inter-block cache, it will be unwrapped
+// prior to being returned. If the StoreKey does not exist, nil is returned.
 func (rs *Store) getStoreByName(name string) types.Store {
 	key := rs.keysByName[name]
 	if key == nil {
 		return nil
 	}
-	return rs.stores[key]
+
+	return rs.GetCommitKVStore(key)
 }
 
 //---------------------- Query ------------------
@@ -313,23 +453,20 @@ func (rs *Store) getStoreByName(name string) types.Store {
 // Ie. `req.Path` here is `/<substore>/<path>`, and trimmed to `/<path>` for the substore.
 // TODO: add proof for `multistore -> substore`.
 func (rs *Store) Query(req abci.RequestQuery) abci.ResponseQuery {
-	// Query just routes this to a substore.
 	path := req.Path
 	storeName, subpath, err := parsePath(path)
 	if err != nil {
-		return err.QueryResult()
+		return sdkerrors.QueryResult(err)
 	}
 
 	store := rs.getStoreByName(storeName)
 	if store == nil {
-		msg := fmt.Sprintf("no such store: %s", storeName)
-		return errors.ErrUnknownRequest(msg).QueryResult()
+		return sdkerrors.QueryResult(sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "no such store: %s", storeName))
 	}
 
 	queryable, ok := store.(types.Queryable)
 	if !ok {
-		msg := fmt.Sprintf("store %s doesn't support queries", storeName)
-		return errors.ErrUnknownRequest(msg).QueryResult()
+		return sdkerrors.QueryResult(sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "store %s (type %T) doesn't support queries", storeName, store))
 	}
 
 	// trim the path and make the query
@@ -341,12 +478,21 @@ func (rs *Store) Query(req abci.RequestQuery) abci.ResponseQuery {
 	}
 
 	if res.Proof == nil || len(res.Proof.Ops) == 0 {
-		return errors.ErrInternal("proof is unexpectedly empty; ensure height has not been pruned").QueryResult()
+		return sdkerrors.QueryResult(sdkerrors.Wrap(sdkerrors.ErrInvalidRequest, "proof is unexpectedly empty; ensure height has not been pruned"))
 	}
 
-	commitInfo, errMsg := getCommitInfo(rs.db, res.Height)
-	if errMsg != nil {
-		return errors.ErrInternal(errMsg.Error()).QueryResult()
+	// If the request's height is the latest height we've committed, then utilize
+	// the store's lastCommitInfo as this commit info may not be flushed to disk.
+	// Otherwise, we query for the commit info from disk.
+	var commitInfo commitInfo
+
+	if res.Height == rs.lastCommitInfo.Version {
+		commitInfo = rs.lastCommitInfo
+	} else {
+		commitInfo, err = getCommitInfo(rs.db, res.Height)
+		if err != nil {
+			return sdkerrors.QueryResult(err)
+		}
 	}
 
 	// Restore origin path and append proof op.
@@ -363,10 +509,9 @@ func (rs *Store) Query(req abci.RequestQuery) abci.ResponseQuery {
 // parsePath expects a format like /<storeName>[/<subpath>]
 // Must start with /, subpath may be empty
 // Returns error if it doesn't start with /
-func parsePath(path string) (storeName string, subpath string, err errors.Error) {
+func parsePath(path string) (storeName string, subpath string, err error) {
 	if !strings.HasPrefix(path, "/") {
-		err = errors.ErrUnknownRequest(fmt.Sprintf("invalid path: %s", path))
-		return
+		return storeName, subpath, sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "invalid path: %s", path)
 	}
 
 	paths := strings.SplitN(path[1:], "/", 2)
@@ -376,18 +521,17 @@ func parsePath(path string) (storeName string, subpath string, err errors.Error)
 		subpath = "/" + paths[1]
 	}
 
-	return
+	return storeName, subpath, nil
 }
 
-//----------------------------------------
-
-func (rs *Store) loadCommitStoreFromParams(key types.StoreKey, id types.CommitID, params storeParams) (store types.CommitStore, err error) {
+func (rs *Store) loadCommitStoreFromParams(key types.StoreKey, id types.CommitID, params storeParams) (types.CommitKVStore, error) {
 	var db dbm.DB
 
 	if params.db != nil {
 		db = dbm.NewPrefixDB(params.db, []byte("s/_/"))
 	} else {
-		db = dbm.NewPrefixDB(rs.db, []byte("s/k:"+params.key.Name()+"/"))
+		prefix := "s/k:" + params.key.Name() + "/"
+		db = dbm.NewPrefixDB(rs.db, []byte(prefix))
 	}
 
 	switch params.typ {
@@ -395,15 +539,27 @@ func (rs *Store) loadCommitStoreFromParams(key types.StoreKey, id types.CommitID
 		panic("recursive MultiStores not yet supported")
 
 	case types.StoreTypeIAVL:
-		return iavl.LoadStore(db, id, rs.pruningOpts, rs.lazyLoading)
+		store, err := iavl.LoadStore(db, id, rs.lazyLoading)
+		if err != nil {
+			return nil, err
+		}
+
+		if rs.interBlockCache != nil {
+			// Wrap and get a CommitKVStore with inter-block caching. Note, this should
+			// only wrap the primary CommitKVStore, not any store that is already
+			// cache-wrapped as that will create unexpected behavior.
+			store = rs.interBlockCache.GetStoreCache(key, store)
+		}
+
+		return store, err
 
 	case types.StoreTypeDB:
-		return commitDBStoreAdapter{dbadapter.Store{db}}, nil
+		return commitDBStoreAdapter{Store: dbadapter.Store{DB: db}}, nil
 
 	case types.StoreTypeTransient:
 		_, ok := key.(*types.TransientStoreKey)
 		if !ok {
-			return store, fmt.Errorf("invalid StoreKey for StoreTypeTransient: %s", key.String())
+			return nil, fmt.Errorf("invalid StoreKey for StoreTypeTransient: %s", key.String())
 		}
 
 		return transient.NewStore(), nil
@@ -411,15 +567,6 @@ func (rs *Store) loadCommitStoreFromParams(key types.StoreKey, id types.CommitID
 	default:
 		panic(fmt.Sprintf("unrecognized store type %v", params.typ))
 	}
-}
-
-func (rs *Store) nameToKey(name string) types.StoreKey {
-	for key := range rs.storesParams {
-		if key.Name() == name {
-			return key
-		}
-	}
-	panic("Unknown name " + name)
 }
 
 //----------------------------------------
@@ -500,12 +647,14 @@ func (si storeInfo) Hash() []byte {
 
 func getLatestVersion(db dbm.DB) int64 {
 	var latest int64
-	latestBytes := db.Get([]byte(latestVersionKey))
-	if latestBytes == nil {
+	latestBytes, err := db.Get([]byte(latestVersionKey))
+	if err != nil {
+		panic(err)
+	} else if latestBytes == nil {
 		return 0
 	}
 
-	err := cdc.UnmarshalBinaryLengthPrefixed(latestBytes, &latest)
+	err = cdc.UnmarshalBinaryLengthPrefixed(latestBytes, &latest)
 	if err != nil {
 		panic(err)
 	}
@@ -513,52 +662,43 @@ func getLatestVersion(db dbm.DB) int64 {
 	return latest
 }
 
-// Set the latest version.
-func setLatestVersion(batch dbm.Batch, version int64) {
-	latestBytes, _ := cdc.MarshalBinaryLengthPrefixed(version)
-	batch.Set([]byte(latestVersionKey), latestBytes)
-}
-
 // Commits each store and returns a new commitInfo.
-func commitStores(version int64, storeMap map[types.StoreKey]types.CommitStore) commitInfo {
+func commitStores(version int64, storeMap map[types.StoreKey]types.CommitKVStore) commitInfo {
 	storeInfos := make([]storeInfo, 0, len(storeMap))
 
 	for key, store := range storeMap {
-		// Commit
 		commitID := store.Commit()
 
 		if store.GetStoreType() == types.StoreTypeTransient {
 			continue
 		}
 
-		// Record CommitID
 		si := storeInfo{}
 		si.Name = key.Name()
 		si.Core.CommitID = commitID
-		// si.Core.StoreType = store.GetStoreType()
 		storeInfos = append(storeInfos, si)
 	}
 
-	ci := commitInfo{
+	return commitInfo{
 		Version:    version,
 		StoreInfos: storeInfos,
 	}
-	return ci
 }
 
 // Gets commitInfo from disk.
 func getCommitInfo(db dbm.DB, ver int64) (commitInfo, error) {
-
-	// Get from DB.
 	cInfoKey := fmt.Sprintf(commitInfoKeyFmt, ver)
-	cInfoBytes := db.Get([]byte(cInfoKey))
-	if cInfoBytes == nil {
-		return commitInfo{}, fmt.Errorf("failed to get Store: no data")
+
+	cInfoBytes, err := db.Get([]byte(cInfoKey))
+	if err != nil {
+		return commitInfo{}, fmt.Errorf("failed to get commit info: %v", err)
+	} else if cInfoBytes == nil {
+		return commitInfo{}, fmt.Errorf("failed to get commit info: no data")
 	}
 
 	var cInfo commitInfo
 
-	err := cdc.UnmarshalBinaryLengthPrefixed(cInfoBytes, &cInfo)
+	err = cdc.UnmarshalBinaryLengthPrefixed(cInfoBytes, &cInfo)
 	if err != nil {
 		return commitInfo{}, fmt.Errorf("failed to get Store: %v", err)
 	}
@@ -566,9 +706,48 @@ func getCommitInfo(db dbm.DB, ver int64) (commitInfo, error) {
 	return cInfo, nil
 }
 
-// Set a commitInfo for given version.
 func setCommitInfo(batch dbm.Batch, version int64, cInfo commitInfo) {
 	cInfoBytes := cdc.MustMarshalBinaryLengthPrefixed(cInfo)
 	cInfoKey := fmt.Sprintf(commitInfoKeyFmt, version)
 	batch.Set([]byte(cInfoKey), cInfoBytes)
+}
+
+func setLatestVersion(batch dbm.Batch, version int64) {
+	latestBytes := cdc.MustMarshalBinaryLengthPrefixed(version)
+	batch.Set([]byte(latestVersionKey), latestBytes)
+}
+
+func setPruningHeights(batch dbm.Batch, pruneHeights []int64) {
+	bz := cdc.MustMarshalBinaryBare(pruneHeights)
+	batch.Set([]byte(pruneHeightsKey), bz)
+}
+
+func getPruningHeights(db dbm.DB) ([]int64, error) {
+	bz, err := db.Get([]byte(pruneHeightsKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pruned heights: %w", err)
+	}
+	if len(bz) == 0 {
+		return nil, errors.New("no pruned heights found")
+	}
+
+	var prunedHeights []int64
+	if err := cdc.UnmarshalBinaryBare(bz, &prunedHeights); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pruned heights: %w", err)
+	}
+
+	return prunedHeights, nil
+}
+
+func flushMetadata(db dbm.DB, version int64, cInfo commitInfo, pruneHeights []int64) {
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	setCommitInfo(batch, version, cInfo)
+	setLatestVersion(batch, version)
+	setPruningHeights(batch, pruneHeights)
+
+	if err := batch.Write(); err != nil {
+		panic(fmt.Errorf("error on batch write %w", err))
+	}
 }

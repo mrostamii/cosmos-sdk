@@ -5,7 +5,7 @@ import (
 	"io"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	cmn "github.com/tendermint/tendermint/libs/common"
+	tmkv "github.com/tendermint/tendermint/libs/kv"
 	dbm "github.com/tendermint/tm-db"
 )
 
@@ -18,6 +18,8 @@ type Store interface { //nolint
 type Committer interface {
 	Commit() CommitID
 	LastCommitID() CommitID
+
+	// TODO: Deprecate after 0.38.5
 	SetPruning(PruningOptions)
 }
 
@@ -37,6 +39,48 @@ type Queryable interface {
 
 //----------------------------------------
 // MultiStore
+
+// StoreUpgrades defines a series of transformations to apply the multistore db upon load
+type StoreUpgrades struct {
+	Renamed []StoreRename `json:"renamed"`
+	Deleted []string      `json:"deleted"`
+}
+
+// StoreRename defines a name change of a sub-store.
+// All data previously under a PrefixStore with OldKey will be copied
+// to a PrefixStore with NewKey, then deleted from OldKey store.
+type StoreRename struct {
+	OldKey string `json:"old_key"`
+	NewKey string `json:"new_key"`
+}
+
+// IsDeleted returns true if the given key should be deleted
+func (s *StoreUpgrades) IsDeleted(key string) bool {
+	if s == nil {
+		return false
+	}
+	for _, d := range s.Deleted {
+		if d == key {
+			return true
+		}
+	}
+	return false
+}
+
+// RenamedFrom returns the oldKey if it was renamed
+// Returns "" if it was not renamed
+func (s *StoreUpgrades) RenamedFrom(key string) string {
+	if s == nil {
+		return ""
+	}
+	for _, re := range s.Renamed {
+		if re.NewKey == key {
+			return re.OldKey
+		}
+	}
+	return ""
+
+}
 
 type MultiStore interface { //nolint
 	Store
@@ -94,11 +138,25 @@ type CommitMultiStore interface {
 	// Mount*Store() are complete.
 	LoadLatestVersion() error
 
+	// LoadLatestVersionAndUpgrade will load the latest version, but also
+	// rename/delete/create sub-store keys, before registering all the keys
+	// in order to handle breaking formats in migrations
+	LoadLatestVersionAndUpgrade(upgrades *StoreUpgrades) error
+
+	// LoadVersionAndUpgrade will load the named version, but also
+	// rename/delete/create sub-store keys, before registering all the keys
+	// in order to handle breaking formats in migrations
+	LoadVersionAndUpgrade(ver int64, upgrades *StoreUpgrades) error
+
 	// Load a specific persisted version. When you load an old version, or when
 	// the last commit attempt didn't complete, the next commit after loading
 	// must be idempotent (return the same commit id). Otherwise the behavior is
 	// undefined.
 	LoadVersion(ver int64) error
+
+	// Set an inter-block (persistent) cache that maintains a mapping from
+	// StoreKeys to CommitKVStores.
+	SetInterBlockCache(MultiStorePersistentCache)
 }
 
 //---------subsp-------------------------------
@@ -269,10 +327,24 @@ func (key *TransientStoreKey) String() string {
 //----------------------------------------
 
 // key-value result for iterator queries
-type KVPair cmn.KVPair
+type KVPair tmkv.Pair
 
 //----------------------------------------
 
 // TraceContext contains TraceKVStore context data. It will be written with
 // every trace operation.
 type TraceContext map[string]interface{}
+
+// MultiStorePersistentCache defines an interface which provides inter-block
+// (persistent) caching capabilities for multiple CommitKVStores based on StoreKeys.
+type MultiStorePersistentCache interface {
+	// Wrap and return the provided CommitKVStore with an inter-block (persistent)
+	// cache.
+	GetStoreCache(key StoreKey, store CommitKVStore) CommitKVStore
+
+	// Return the underlying CommitKVStore for a StoreKey.
+	Unwrap(key StoreKey) CommitKVStore
+
+	// Reset the entire set of internal caches.
+	Reset()
+}

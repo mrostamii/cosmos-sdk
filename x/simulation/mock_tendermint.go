@@ -8,7 +8,7 @@ import (
 	"time"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	cmn "github.com/tendermint/tendermint/libs/common"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
@@ -61,7 +61,7 @@ func (vals mockValidators) getKeys() []string {
 //_________________________________________________________________________________
 
 // randomProposer picks a random proposer from the current validator set
-func (vals mockValidators) randomProposer(r *rand.Rand) cmn.HexBytes {
+func (vals mockValidators) randomProposer(r *rand.Rand) tmbytes.HexBytes {
 	keys := vals.getKeys()
 	if len(keys) == 0 {
 		return nil
@@ -158,7 +158,7 @@ func RandomRequestBeginBlock(r *rand.Rand, params Params,
 	}
 
 	// return if no past times
-	if len(pastTimes) <= 0 {
+	if len(pastTimes) == 0 {
 		return abci.RequestBeginBlock{
 			Header: header,
 			LastCommitInfo: abci.LastCommitInfo{

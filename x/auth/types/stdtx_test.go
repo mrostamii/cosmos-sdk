@@ -13,6 +13,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 var (
@@ -27,7 +28,7 @@ func TestStdTx(t *testing.T) {
 
 	tx := NewStdTx(msgs, fee, sigs, "")
 	require.Equal(t, msgs, tx.GetMsgs())
-	require.Equal(t, sigs, tx.GetSignatures())
+	require.Equal(t, sigs, tx.Signatures)
 
 	feePayer := tx.GetSigners()[0]
 	require.Equal(t, addr, feePayer)
@@ -49,7 +50,7 @@ func TestStdSignBytes(t *testing.T) {
 	}{
 		{
 			args{"1234", 3, 6, defaultFee, []sdk.Msg{sdk.NewTestMsg(addr)}, "memo"},
-			fmt.Sprintf("{\"account_number\":\"3\",\"chain_id\":\"1234\",\"fee\":{\"amount\":[{\"amount\":\"150\",\"denom\":\"atom\"}],\"gas\":\"50000\"},\"memo\":\"memo\",\"msgs\":[[\"%s\"]],\"sequence\":\"6\"}", addr),
+			fmt.Sprintf("{\"account_number\":\"3\",\"chain_id\":\"1234\",\"fee\":{\"amount\":[{\"amount\":\"150\",\"denom\":\"atom\"}],\"gas\":\"100000\"},\"memo\":\"memo\",\"msgs\":[[\"%s\"]],\"sequence\":\"6\"}", addr),
 		},
 	}
 	for i, tc := range tests {
@@ -78,7 +79,8 @@ func TestTxValidateBasic(t *testing.T) {
 
 	err := tx.ValidateBasic()
 	require.Error(t, err)
-	require.Equal(t, sdk.CodeInsufficientFee, err.Result().Code)
+	_, code, _ := sdkerrors.ABCIInfo(err, false)
+	require.Equal(t, sdkerrors.ErrInsufficientFee.ABCICode(), code)
 
 	// require to fail validation when no signatures exist
 	privs, accNums, seqs := []crypto.PrivKey{}, []uint64{}, []uint64{}
@@ -86,7 +88,8 @@ func TestTxValidateBasic(t *testing.T) {
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
-	require.Equal(t, sdk.CodeNoSignatures, err.Result().Code)
+	_, code, _ = sdkerrors.ABCIInfo(err, false)
+	require.Equal(t, sdkerrors.ErrNoSignatures.ABCICode(), code)
 
 	// require to fail validation when signatures do not match expected signers
 	privs, accNums, seqs = []crypto.PrivKey{priv1}, []uint64{0, 1}, []uint64{0, 0}
@@ -94,7 +97,8 @@ func TestTxValidateBasic(t *testing.T) {
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
-	require.Equal(t, sdk.CodeUnauthorized, err.Result().Code)
+	_, code, _ = sdkerrors.ABCIInfo(err, false)
+	require.Equal(t, sdkerrors.ErrUnauthorized.ABCICode(), code)
 
 	// require to fail with invalid gas supplied
 	badFee = NewTestStdFee()
@@ -103,7 +107,8 @@ func TestTxValidateBasic(t *testing.T) {
 
 	err = tx.ValidateBasic()
 	require.Error(t, err)
-	require.Equal(t, sdk.CodeGasOverflow, err.Result().Code)
+	_, code, _ = sdkerrors.ABCIInfo(err, false)
+	require.Equal(t, sdkerrors.ErrInvalidRequest.ABCICode(), code)
 
 	// require to pass when above criteria are matched
 	privs, accNums, seqs = []crypto.PrivKey{priv1, priv2}, []uint64{0, 1}, []uint64{0, 0}
@@ -148,11 +153,11 @@ func TestStdSignatureMarshalYAML(t *testing.T) {
 		},
 		{
 			StdSignature{PubKey: pubKey, Signature: []byte("dummySig")},
-			fmt.Sprintf("|\n  pubkey: %s\n  signature: dummySig\n", sdk.MustBech32ifyAccPub(pubKey)),
+			fmt.Sprintf("|\n  pubkey: %s\n  signature: dummySig\n", sdk.MustBech32ifyPubKey(sdk.Bech32PubKeyTypeAccPub, pubKey)),
 		},
 		{
 			StdSignature{PubKey: pubKey, Signature: nil},
-			fmt.Sprintf("|\n  pubkey: %s\n  signature: \"\"\n", sdk.MustBech32ifyAccPub(pubKey)),
+			fmt.Sprintf("|\n  pubkey: %s\n  signature: \"\"\n", sdk.MustBech32ifyPubKey(sdk.Bech32PubKeyTypeAccPub, pubKey)),
 		},
 	}
 

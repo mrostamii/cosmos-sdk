@@ -5,9 +5,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	amino "github.com/tendermint/go-amino"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmamino "github.com/tendermint/tendermint/crypto/encoding/amino"
 
+	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/hd"
 	"github.com/cosmos/cosmos-sdk/tests"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -30,7 +33,7 @@ func TestLazyKeyManagement(t *testing.T) {
 
 	algo := Secp256k1
 	n1, n2, n3 := "personal", "business", "other"
-	p1, p2 := "1234", "really-secure!@#$"
+	p1, p2 := nums, "really-secure!@#$"
 
 	// Check empty state
 	l, err := kb.List()
@@ -86,7 +89,7 @@ func TestLazyKeyManagement(t *testing.T) {
 	o1 := "offline"
 	priv1 := ed25519.GenPrivKey()
 	pub1 := priv1.PubKey()
-	i, err = kb.CreateOffline(o1, pub1)
+	i, err = kb.CreateOffline(o1, pub1, algo)
 	require.Nil(t, err)
 	require.Equal(t, pub1, i.GetPubKey())
 	require.Equal(t, o1, i.GetName())
@@ -113,7 +116,7 @@ func TestLazySignVerify(t *testing.T) {
 	algo := Secp256k1
 
 	n1, n2, n3 := "some dude", "a dudette", "dude-ish"
-	p1, p2, p3 := "1234", "foobar", "foobar"
+	p1, p2, p3 := nums, foobar, foobar
 
 	// create two users and get their info
 	i1, _, err := kb.CreateMnemonic(n1, English, p1, algo)
@@ -242,10 +245,11 @@ func TestLazyExportImportPubKey(t *testing.T) {
 	dir, cleanup := tests.NewTestCaseDir(t)
 	defer cleanup()
 	kb := New("keybasename", dir)
+	algo := Secp256k1
 
 	// CreateMnemonic a private-public key pair and ensure consistency
 	notPasswd := "n9y25ah7"
-	info, _, err := kb.CreateMnemonic("john", English, notPasswd, Secp256k1)
+	info, _, err := kb.CreateMnemonic("john", English, notPasswd, algo)
 	require.Nil(t, err)
 	require.NotEqual(t, info, "")
 	require.Equal(t, info.GetName(), "john")
@@ -301,7 +305,7 @@ func TestLazyAdvancedKeyManagement(t *testing.T) {
 
 	algo := Secp256k1
 	n1, n2 := "old-name", "new name"
-	p1, p2 := "1234", "foobar"
+	p1, p2 := nums, foobar
 
 	// make sure key works with initial password
 	_, _, err := kb.CreateMnemonic(n1, English, p1, algo)
@@ -349,7 +353,7 @@ func TestLazySeedPhrase(t *testing.T) {
 
 	algo := Secp256k1
 	n1, n2 := "lost-key", "found-again"
-	p1, p2 := "1234", "foobar"
+	p1, p2 := nums, foobar
 
 	// make sure key works with initial password
 	info, mnemonic, err := kb.CreateMnemonic(n1, English, p1, algo)
@@ -365,9 +369,84 @@ func TestLazySeedPhrase(t *testing.T) {
 
 	// let us re-create it from the mnemonic-phrase
 	params := *hd.NewFundraiserParams(0, sdk.CoinType, 0)
-	newInfo, err := kb.Derive(n2, mnemonic, DefaultBIP39Passphrase, p2, params)
+	hdPath := params.String()
+	newInfo, err := kb.CreateAccount(n2, mnemonic, DefaultBIP39Passphrase, p2, hdPath, algo)
 	require.NoError(t, err)
 	require.Equal(t, n2, newInfo.GetName())
 	require.Equal(t, info.GetPubKey().Address(), newInfo.GetPubKey().Address())
 	require.Equal(t, info.GetPubKey(), newInfo.GetPubKey())
+}
+
+var _ crypto.PrivKey = testPriv{}
+var _ crypto.PubKey = testPub{}
+var testCdc *amino.Codec
+
+type testPriv []byte
+
+func (privkey testPriv) PubKey() crypto.PubKey { return testPub{} }
+func (privkey testPriv) Bytes() []byte {
+	return testCdc.MustMarshalBinaryBare(privkey)
+}
+func (privkey testPriv) Sign(msg []byte) ([]byte, error)  { return []byte{}, nil }
+func (privkey testPriv) Equals(other crypto.PrivKey) bool { return true }
+
+type testPub []byte
+
+func (key testPub) Address() crypto.Address { return crypto.Address{} }
+func (key testPub) Bytes() []byte {
+	return testCdc.MustMarshalBinaryBare(key)
+}
+func (key testPub) VerifyBytes(msg []byte, sig []byte) bool { return true }
+func (key testPub) Equals(other crypto.PubKey) bool         { return true }
+
+func TestKeygenOverride(t *testing.T) {
+	dir, cleanup := tests.NewTestCaseDir(t)
+	defer cleanup()
+
+	// Save existing codec and reset after test
+	cryptoCdc := CryptoCdc
+	defer func() {
+		CryptoCdc = cryptoCdc
+	}()
+
+	// Setup testCdc encoding and decoding new key type
+	testCdc = codec.New()
+	RegisterCodec(testCdc)
+	tmamino.RegisterAmino(testCdc)
+
+	// Set up codecs for using new key types
+	privName, pubName := "test/priv_name", "test/pub_name"
+	tmamino.RegisterKeyType(testPriv{}, privName)
+	tmamino.RegisterKeyType(testPub{}, pubName)
+	testCdc.RegisterConcrete(testPriv{}, privName, nil)
+	testCdc.RegisterConcrete(testPub{}, pubName, nil)
+	CryptoCdc = testCdc
+
+	overrideCalled := false
+	dummyFunc := func(bz []byte, algo SigningAlgo) (crypto.PrivKey, error) {
+		overrideCalled = true
+		return testPriv(bz), nil
+	}
+
+	kb := New("keybasename", dir, WithKeygenFunc(dummyFunc))
+
+	testName, pw := "name", "testPassword"
+
+	// create new key which will generate with
+	info, _, err := kb.CreateMnemonic(testName, English, pw, Secp256k1)
+	require.NoError(t, err)
+	require.Equal(t, info.GetName(), testName)
+
+	// Assert overridden function was called
+	require.True(t, overrideCalled)
+
+	// export private key object
+	exported, err := kb.ExportPrivateKeyObject(testName, pw)
+	require.Nil(t, err, "%+v", err)
+
+	// require that the key type is the new key
+	_, ok := exported.(testPriv)
+	require.True(t, ok)
+
+	require.True(t, exported.PubKey().Equals(info.GetPubKey()))
 }

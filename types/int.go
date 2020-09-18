@@ -53,7 +53,7 @@ func max(i *big.Int, i2 *big.Int) *big.Int {
 }
 
 // MarshalAmino for custom encoding scheme
-func marshalAmino(i *big.Int) (string, error) {
+func marshalAmino(i *big.Int) (string, error) { // nolint:interfacer
 	bz, err := i.MarshalText()
 	return string(bz), err
 }
@@ -77,7 +77,7 @@ func unmarshalAmino(i *big.Int, text string) (err error) {
 
 // MarshalJSON for custom encoding scheme
 // Must be encoded as a string for JSON precision
-func marshalJSON(i *big.Int) ([]byte, error) {
+func marshalJSON(i *big.Int) ([]byte, error) { // nolint:interfacer
 	text, err := i.MarshalText()
 	if err != nil {
 		return nil, err
@@ -112,6 +112,13 @@ func (i Int) BigInt() *big.Int {
 // NewInt constructs Int from int64
 func NewInt(n int64) Int {
 	return Int{big.NewInt(n)}
+}
+
+// NewIntFromUint64 constructs an Int from a uint64.
+func NewIntFromUint64(n uint64) Int {
+	b := big.NewInt(0)
+	b.SetUint64(n)
+	return Int{b}
 }
 
 // NewIntFromBigInt constructs Int from big.Int
@@ -176,6 +183,20 @@ func (i Int) Int64() int64 {
 // IsInt64 returns true if Int64() not panics
 func (i Int) IsInt64() bool {
 	return i.i.IsInt64()
+}
+
+// Uint64 converts Int to uint64
+// Panics if the value is out of range
+func (i Int) Uint64() uint64 {
+	if !i.i.IsUint64() {
+		panic("Uint64() out of bounds")
+	}
+	return i.i.Uint64()
+}
+
+// IsUint64 returns true if Uint64() not panics
+func (i Int) IsUint64() bool {
+	return i.i.IsUint64()
 }
 
 // IsZero returns true if Int is zero
