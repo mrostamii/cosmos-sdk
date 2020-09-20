@@ -2,8 +2,6 @@ go 1.15
 
 module github.com/cosmos/cosmos-sdk
 
-go 1.13
-
 require (
 	github.com/99designs/keyring v1.1.5
 	github.com/armon/go-metrics v0.3.4
