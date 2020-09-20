@@ -183,13 +183,3 @@ func TestResponseFormatBroadcastTxCommit(t *testing.T) {
 	require.Equal(t, want, sdk.NewResponseFormatBroadcastTxCommit(checkTxResult))
 	require.Equal(t, want, sdk.NewResponseFormatBroadcastTxCommit(deliverTxResult))
 }
-
-func TestABCIMessageLog(t *testing.T) {
-	events := Events{NewEvent("transfer", NewAttribute("sender", "foo"))}
-	msgLog := NewABCIMessageLog(0, true, "", events)
-
-	msgLogs := ABCIMessageLogs{msgLog}
-	bz, err := codec.Cdc.MarshalJSON(msgLogs)
-	require.NoError(t, err)
-	require.Equal(t, string(bz), msgLogs.String())
-}

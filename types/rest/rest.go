@@ -284,7 +284,7 @@ func PostProcessResponseBare(w http.ResponseWriter, ctx client.Context, body int
 			return
 		}
 	} else {
-		cliCtx = cliCtx.WithHeight(0)
+		clientCtx = clientCtx.WithHeight(0)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -323,24 +323,6 @@ func PostProcessResponse(w http.ResponseWriter, ctx client.Context, resp interfa
 
 	output, err := marshaler.MarshalJSON(wrappedResp)
 	if CheckInternalServerError(w, err) {
-		return
-	}
-
-	wrappedResp := NewResponseWithHeight(cliCtx.Height, result)
-
-	var (
-		output []byte
-		err    error
-	)
-
-	if cliCtx.Indent {
-		output, err = cliCtx.Codec.MarshalJSONIndent(wrappedResp, "", "  ")
-	} else {
-		output, err = cliCtx.Codec.MarshalJSON(wrappedResp)
-	}
-
-	if err != nil {
-		WriteErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

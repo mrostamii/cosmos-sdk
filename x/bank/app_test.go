@@ -198,41 +198,6 @@ func TestSendToModuleAcc(t *testing.T) {
 	}
 }
 
-func TestSendToModuleAcc(t *testing.T) {
-	mapp := getMockApp(t)
-	acc := &auth.BaseAccount{
-		Address: addr1,
-		Coins:   coins,
-	}
-
-	macc := &auth.BaseAccount{
-		Address: moduleAccAddr,
-	}
-
-	mock.SetGenesis(mapp, []auth.Account{acc, macc})
-
-	ctxCheck := mapp.BaseApp.NewContext(true, abci.Header{})
-
-	res1 := mapp.AccountKeeper.GetAccount(ctxCheck, addr1)
-	require.NotNil(t, res1)
-	require.Equal(t, acc, res1.(*auth.BaseAccount))
-
-	origAccNum := res1.GetAccountNumber()
-	origSeq := res1.GetSequence()
-
-	header := abci.Header{Height: mapp.LastBlockHeight() + 1}
-	mock.SignCheckDeliver(t, mapp.Cdc, mapp.BaseApp, header, []sdk.Msg{sendMsg2}, []uint64{origAccNum}, []uint64{origSeq}, false, false, priv1)
-
-	mock.CheckBalance(t, mapp, addr1, coins)
-	mock.CheckBalance(t, mapp, moduleAccAddr, sdk.Coins(nil))
-
-	res2 := mapp.AccountKeeper.GetAccount(mapp.NewContext(true, abci.Header{}), addr1)
-	require.NotNil(t, res2)
-
-	require.True(t, res2.GetAccountNumber() == origAccNum)
-	require.True(t, res2.GetSequence() == origSeq+1)
-}
-
 func TestMsgMultiSendWithAccounts(t *testing.T) {
 	acc := &authtypes.BaseAccount{
 		Address: addr1,

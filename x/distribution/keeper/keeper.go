@@ -23,8 +23,6 @@ type Keeper struct {
 
 	blockedAddrs map[string]bool
 
-	blacklistedAddrs map[string]bool
-
 	feeCollectorName string // name of the FeeCollector ModuleAccount
 }
 

@@ -12,17 +12,6 @@ import (
 // Implements Delegation interface
 var _ exported.SupplyI = (*Supply)(nil)
 
-// SetTotal sets the total supply.
-func (supply Supply) SetTotal(total sdk.Coins) exported.SupplyI {
-	supply.Total = total
-	return supply
-}
-
-// GetTotal returns the supply total.
-func (supply Supply) GetTotal() sdk.Coins {
-	return supply.Total
-}
-
 // NewSupply creates a new Supply instance
 func NewSupply(total sdk.Coins) *Supply {
 	return &Supply{total}
@@ -51,7 +40,6 @@ func (supply *Supply) Inflate(amount sdk.Coins) {
 // Deflate subtracts coins from the total supply.
 func (supply *Supply) Deflate(amount sdk.Coins) {
 	supply.Total = supply.Total.Sub(amount)
-	return supply
 }
 
 // String returns a human readable string representation of a supplier.
