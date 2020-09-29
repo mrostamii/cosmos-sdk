@@ -1,8 +1,11 @@
 package baseapp
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 
@@ -25,21 +28,6 @@ const (
 	runTxModeReCheck                   // Recheck a (pending) transaction after a commit
 	runTxModeSimulate                  // Simulate a transaction
 	runTxModeDeliver                   // Deliver a transaction
-)
-
-var (
-	_ abci.Application = (*BaseApp)(nil)
-)
-
-type (
-	// Enum mode for app.runTx
-	runTxMode uint8
-
-	// StoreLoader defines a customizable function to control how we load the CommitMultiStore
-	// from disk. This is useful for state migration, when loading a datastore written with
-	// an older version of the software. In particular, if a module changed the substore key name
-	// (or removed a substore) between two versions of the software.
-	StoreLoader func(ms sdk.CommitMultiStore) error
 )
 
 var (
@@ -120,17 +108,6 @@ type BaseApp struct { // nolint: maligned
 	// minimum block time (in Unix seconds) at which to halt the chain and gracefully shutdown
 	haltTime uint64
 
-	// application's version string
-	appVersion string
-
-	// side channel
-	beginSideBlocker     sdk.BeginSideBlocker
-	deliverSideTxHandler sdk.DeliverSideTxHandler
-	postDeliverTxHandler sdk.PostDeliverTxHandler
-}
-
-	// trace set will return full stack traces for errors in ABCI Log field
-	trace bool
 	// minRetainBlocks defines the minimum block height offset from the current
 	// block being committed, such that all blocks past this offset are pruned
 	// from Tendermint. It is used as part of the process of determining the
@@ -155,6 +132,11 @@ type BaseApp struct { // nolint: maligned
 	// indexEvents defines the set of events in the form {eventType}.{attributeKey},
 	// which informs Tendermint what to index. If empty, all events will be indexed.
 	indexEvents map[string]struct{}
+
+	// side channel
+	beginSideBlocker     sdk.BeginSideBlocker
+	deliverSideTxHandler sdk.DeliverSideTxHandler
+	postDeliverTxHandler sdk.PostDeliverTxHandler
 }
 
 // NewBaseApp returns a reference to an initialized BaseApp. It accepts a

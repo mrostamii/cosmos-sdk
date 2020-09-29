@@ -283,8 +283,6 @@ func PostProcessResponseBare(w http.ResponseWriter, ctx client.Context, body int
 		if CheckInternalServerError(w, err) {
 			return
 		}
-	} else {
-		clientCtx = clientCtx.WithHeight(0)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
