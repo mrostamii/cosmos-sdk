@@ -14,5 +14,3 @@ message PublicKey {
     bytes ed25519 = 1;
   }
 }
-
-

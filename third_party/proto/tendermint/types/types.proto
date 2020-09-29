@@ -26,13 +26,13 @@ enum SignedMsgType {
   option (gogoproto.goproto_enum_stringer) = true;
   option (gogoproto.goproto_enum_prefix)   = false;
 
-  SIGNED_MSG_TYPE_UNKNOWN = 0 [(gogoproto.enumvalue_customname) = "UnknownType"];
+  SIGNED_MSG_TYPE_UNKNOWN   = 0 [(gogoproto.enumvalue_customname) = "UnknownType"];
   // Votes
   SIGNED_MSG_TYPE_PREVOTE   = 1 [(gogoproto.enumvalue_customname) = "PrevoteType"];
   SIGNED_MSG_TYPE_PRECOMMIT = 2 [(gogoproto.enumvalue_customname) = "PrecommitType"];
 
   // Proposals
-  SIGNED_MSG_TYPE_PROPOSAL = 32 [(gogoproto.enumvalue_customname) = "ProposalType"];
+  SIGNED_MSG_TYPE_PROPOSAL  = 32 [(gogoproto.enumvalue_customname) = "ProposalType"];
 }
 
 // PartsetHeader
@@ -105,8 +105,6 @@ message Vote {
   bytes validator_address = 6;
   int32 validator_index   = 7;
   bytes signature         = 8;
-
-    repeated SideTxResult     side_tx_results = 9; // [peppermint] side tx results
 }
 
 // Commit contains the evidence that a block was committed by a set of validators.
@@ -146,7 +144,7 @@ message SignedHeader {
 
 message LightBlock {
   SignedHeader                  signed_header = 1;
-  tendermint.types.ValidatorSet validator_set = 2;
+  tendermint.types.ValidatorSet validator_set = 2; 
 }
 
 message BlockMeta {
@@ -162,35 +160,3 @@ message TxProof {
   bytes                   data      = 2;
   tendermint.crypto.Proof proof     = 3;
 }
-
-// Side tx results
-message SideTxResult {
-  bytes tx_hash = 1;
-  repeated SideTxSig sigs = 2 [(gogoproto.nullable)=false];
-}
-
-
-// Side-tx sig
-message SideTxSig {
-  SideTxResultType result = 1;
-  bytes sig = 2;
-  bytes address = 3;
-}
-
-
-// Side-tx result type
-enum SideTxResultType {
-  SKIP = 0;
-  YES = 1;
-  NO = 2;
-}
-
-/* // SideTxResultWithData side tx result with data for vote
-message SideTxResultWithData {
-
-  bytes tx_hash = 1;
-  repeated SideTxSig sigs = 2 [(gogoproto.nullable)=false];
-    bytes data = 3;
-}
-
- */

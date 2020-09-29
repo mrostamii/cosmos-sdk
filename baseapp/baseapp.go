@@ -19,6 +19,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/snapshots"
 	"github.com/cosmos/cosmos-sdk/store"
 	"github.com/cosmos/cosmos-sdk/store/rootmulti"
+	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
@@ -256,11 +257,6 @@ func (app *BaseApp) LoadLatestVersion() error {
 	}
 
 	return app.init()
-}
-
-// DefaultStoreLoader will be used by default and loads the latest version
-func DefaultStoreLoader(ms sdk.CommitMultiStore) error {
-	return ms.LoadLatestVersion()
 }
 
 // DefaultStoreLoader will be used by default and loads the latest version

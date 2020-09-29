@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	abci "github.com/tendermint/tendermint/abci/types"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 const (
@@ -67,14 +68,13 @@ func ResponseDeliverTx(err error, gw, gu uint64, debug bool) abci.ResponseDelive
 
 // ResponseDeliverSideTx returns an ABCI ResponseDeliverSideTx object with fields filled in
 // from the given error and gas values.
-func ResponseDeliverSideTx(err error, gw, gu uint64, debug bool) abci.ResponseDeliverTx {
-	space, code, log := ABCIInfo(err, debug)
-	return abci.ResponseDeliverTx{
+func ResponseDeliverSideTx(err error, gw, gu uint64, debug bool) abci.ResponseDeliverSideTx {
+	// TODO - add log, gaswanted, gasused
+	space, code, _ := ABCIInfo(err, debug)
+	return abci.ResponseDeliverSideTx{
 		Codespace: space,
 		Code:      code,
-		Log:       log,
-		GasWanted: int64(gw),
-		GasUsed:   int64(gu),
+		Result:    tmproto.SideTxResultType_SKIP,
 	}
 }
 

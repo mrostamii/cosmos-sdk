@@ -842,15 +842,10 @@ func (app *BaseApp) BeginSideBlock(req abci.RequestBeginSideBlock) (res abci.Res
 func (app *BaseApp) DeliverSideTx(req abci.RequestDeliverSideTx) (res abci.ResponseDeliverSideTx) {
 	tx, err := app.txDecoder(req.Tx)
 	if err != nil {
-		r := err.Result()
-		res = abci.ResponseDeliverSideTx{
-			Result:    abci.SideTxResultType_Skip,
-			Code:      uint32(r.Code),
-			Codespace: string(r.Codespace),
-		}
-	} else {
-		res = app.runSideTx(req.Tx, tx, req)
+		return sdkerrors.ResponseDeliverSideTx(err, 0, 0, app.trace)
 	}
+
+	res = app.runSideTx(req.Tx, tx, req)
 
 	return
 }
@@ -860,21 +855,19 @@ func (app *BaseApp) runSideTx(txBytes []byte, tx sdk.Tx, req abci.RequestDeliver
 	defer func() {
 		if r := recover(); r != nil {
 			res = abci.ResponseDeliverSideTx{
-				Result:    abci.SideTxResultType_Skip, // skip proposal
-				Code:      uint32(sdk.CodeInternal),
-				Codespace: string(sdk.CodespaceRoot),
+				Result: tmproto.SideTxResultType_SKIP, // skip proposal
+				// TODO - tm-upgrade use constants
+				// Code:      uint32(sdk.CodeInternal),
+				// Codespace: string(sdk.CodespaceRoot),
+				Code:      uint32(1),
+				Codespace: string("sdk"),
 			}
 		}
 	}()
 
 	var msgs = tx.GetMsgs()
 	if err := validateBasicTxMsgs(msgs); err != nil {
-		r := err.Result()
-		res = abci.ResponseDeliverSideTx{
-			Result:    abci.SideTxResultType_Skip, // skip proposal
-			Code:      uint32(r.Code),
-			Codespace: string(r.Codespace),
-		}
+		res = sdkerrors.ResponseDeliverSideTx(err, 0, 0, app.trace)
 		return
 	}
 
@@ -885,7 +878,7 @@ func (app *BaseApp) runSideTx(txBytes []byte, tx sdk.Tx, req abci.RequestDeliver
 		res = app.deliverSideTxHandler(ctx, tx, req)
 	} else {
 		res = abci.ResponseDeliverSideTx{
-			Result: abci.SideTxResultType_Skip, // skip proposal
+			Result: tmproto.SideTxResultType_SKIP, // skip proposal
 		}
 	}
 
