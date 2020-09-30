@@ -48,7 +48,7 @@ func (pv PV) SignProposal(chainID string, proposal *tmproto.Proposal) error {
 }
 
 // SignSideTxResult signs given data bytes
-func (pv PV) SignSideTxResult(sideTxResult *tmproto.SideTxResultWithData) error {
+func (pv PV) SignSideTxResult(sideTxResult *tmtypes.SideTxResultWithData) error {
 	sig, err := pv.PrivKey.Sign(sideTxResult.GetBytes())
 	if err != nil {
 		return err
