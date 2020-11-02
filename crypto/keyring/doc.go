@@ -18,7 +18,7 @@
 // map that has historically been used for testing purposes or on-the-fly key generation as the
 // generated keys are discarded when the process terminates or the type instance is garbage
 // collected.
-//
+//	
 // New
 //
 // The New constructor returns an implementation backed by a keyring library

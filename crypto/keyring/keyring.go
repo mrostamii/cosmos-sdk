@@ -55,7 +55,7 @@ type Keyring interface {
 	// Supported signing algorithms for Keyring and Ledger respectively.
 	SupportedAlgorithms() (SigningAlgoList, SigningAlgoList)
 
-	// Key and KeyByAddress return keys by uid and address respectively.
+	// Key and KeyByAddress return key	s by uid and address respectively.
 	Key(uid string) (Info, error)
 	KeyByAddress(address sdk.Address) (Info, error)
 
