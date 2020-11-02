@@ -30,6 +30,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/otiai10/copy v1.2.0
 	github.com/pelletier/go-toml v1.8.0 // indirect
+	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.8.0
 	github.com/prometheus/common v0.14.0
@@ -50,7 +51,7 @@ require (
 	golang.org/x/crypto v0.0.0-20201012173705-84dcc777aaee
 	golang.org/x/net v0.0.0-20200930145003-4acb6c075d10 // indirect
 	google.golang.org/genproto v0.0.0-20201014134559-03b6142f0dc9
-	google.golang.org/grpc v1.33.0
+	google.golang.org/grpc v1.33.1
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v2 v2.3.0
 )

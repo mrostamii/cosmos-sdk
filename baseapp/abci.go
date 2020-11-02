@@ -115,10 +115,10 @@ func (app *BaseApp) Info(req abci.RequestInfo) abci.ResponseInfo {
 }
 
 // SetOption implements the ABCI interface.
-func (app *BaseApp) SetOption(req abci.RequestSetOption) (res abci.ResponseSetOption) {
-	// TODO: Implement!
-	return
-}
+// func (app *BaseApp) SetOption(req abci.RequestSetOption) (res abci.ResponseSetOption) {
+// 	// TODO: Implement!
+// 	return
+// }
 
 // FilterPeerByAddrPort filters peers by address/port.
 func (app *BaseApp) FilterPeerByAddrPort(info string) abci.ResponseQuery {
