@@ -12,7 +12,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 
-	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 )
 
 // ExportGenesisFile creates and writes the genesis configuration to disk. An
@@ -70,10 +70,15 @@ func InitializeNodeValidatorFiles(config *cfg.Config) (nodeID string, valPubKey 
 		return "", nil, err
 	}
 
-	valPubKey, err = ed25519.FromTmEd25519(tmValPubKey)
+	valPubKey, err = secp256k1.FromTmSecp256k1(tmValPubKey)
 	if err != nil {
 		return "", nil, err
 	}
+
+	// valPubKey, err = ed25519.FromTmEd25519(tmValPubKey)
+	// if err != nil {
+	// 	return "", nil, err
+	// }
 
 	return nodeID, valPubKey, nil
 }

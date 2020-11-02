@@ -8,13 +8,15 @@ import (
 	"io"
 	"math/big"
 
-	secp256k1 "github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/tendermint/tendermint/crypto"
 	"golang.org/x/crypto/ripemd160" // nolint: staticcheck // necessary for Bitcoin address format
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types/errors"
+
+	secp256k1 "github.com/tendermint/tendermint/crypto/secp256k1"
 )
 
 var _ cryptotypes.PrivKey = &PrivKey{}
@@ -35,7 +37,7 @@ func (privKey *PrivKey) Bytes() []byte {
 // PubKey performs the point-scalar multiplication from the privKey on the
 // generator point to get the pubkey.
 func (privKey *PrivKey) PubKey() crypto.PubKey {
-	_, pubkeyObject := secp256k1.PrivKeyFromBytes(secp256k1.S256(), privKey.Key)
+	_, pubkeyObject := btcec.PrivKeyFromBytes(btcec.S256(), privKey.Key)
 	pk := pubkeyObject.SerializeCompressed()
 	return &PubKey{Key: pk}
 }
@@ -96,7 +98,7 @@ func genPrivKey(rand io.Reader) []byte {
 
 		d.SetBytes(privKeyBytes[:])
 		// break if we found a valid point (i.e. > 0 and < N == curverOrder)
-		isValidFieldElement := 0 < d.Sign() && d.Cmp(secp256k1.S256().N) < 0
+		isValidFieldElement := 0 < d.Sign() && d.Cmp(btcec.S256().N) < 0
 		if isValidFieldElement {
 			break
 		}
@@ -124,7 +126,7 @@ func GenPrivKeyFromSecret(secret []byte) *PrivKey {
 	// https://apps.nsa.gov/iaarchive/library/ia-guidance/ia-solutions-for-classified/algorithm-guidance/suite-b-implementers-guide-to-fips-186-3-ecdsa.cfm
 	// see also https://github.com/golang/go/blob/0380c9ad38843d523d9c9804fe300cb7edd7cd3c/src/crypto/ecdsa/ecdsa.go#L89-L101
 	fe := new(big.Int).SetBytes(secHash[:])
-	n := new(big.Int).Sub(secp256k1.S256().N, one)
+	n := new(big.Int).Sub(btcec.S256().N, one)
 	fe.Mod(fe, n)
 	fe.Add(fe, one)
 
@@ -202,4 +204,20 @@ func (pubKey PubKey) MarshalAminoJSON() ([]byte, error) {
 // UnmarshalAminoJSON overrides Amino JSON marshalling.
 func (pubKey *PubKey) UnmarshalAminoJSON(bz []byte) error {
 	return pubKey.UnmarshalAmino(bz)
+}
+
+// AsTmPubKey converts our own PubKey into a Tendermint ED25519 pubkey.
+func (pubKey *PubKey) AsTmPubKey() crypto.PubKey {
+	return secp256k1.PubKey(pubKey.Key)
+}
+
+// FromTmSecp256k1 converts a Tendermint SECP256k1 pubkey into our own SECP256k1
+// PubKey.
+func FromTmSecp256k1(pubKey crypto.PubKey) (*PubKey, error) {
+	tmPk, ok := pubKey.(secp256k1.PubKey)
+	if !ok {
+		return nil, fmt.Errorf("expected %T, got %T", secp256k1.PubKey{}, pubKey)
+	}
+
+	return &PubKey{Key: []byte(tmPk)}, nil
 }
