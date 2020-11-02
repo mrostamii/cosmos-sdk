@@ -14,14 +14,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 var (
-	_ AccountI       = (*BaseAccount)(nil)
-	_ GenesisAccount = (*BaseAccount)(nil)
-	_ GenesisAccount = (*ModuleAccount)(nil)
-	_ ModuleAccountI = (*ModuleAccount)(nil)
+	_ AccountI                           = (*BaseAccount)(nil)
+	_ GenesisAccount                     = (*BaseAccount)(nil)
+	_ codectypes.UnpackInterfacesMessage = (*BaseAccount)(nil)
+	_ GenesisAccount                     = (*ModuleAccount)(nil)
+	_ ModuleAccountI                     = (*ModuleAccount)(nil)
 )
 
 // NewBaseAccount creates a new BaseAccount object
@@ -83,22 +83,11 @@ func (acc BaseAccount) GetPubKey() (pk crypto.PubKey) {
 
 // SetPubKey - Implements sdk.AccountI.
 func (acc *BaseAccount) SetPubKey(pubKey crypto.PubKey) error {
-	if pubKey == nil {
-		acc.PubKey = nil
-	} else {
-		protoMsg, ok := pubKey.(proto.Message)
-		if !ok {
-			return sdkerrors.ErrInvalidPubKey
-		}
-
-		any, err := codectypes.NewAnyWithValue(protoMsg)
-		if err != nil {
-			return err
-		}
-
-		acc.PubKey = any
+	any, err := codectypes.PackAny(pubKey)
+	if err != nil {
+		return err
 	}
-
+	acc.PubKey = any
 	return nil
 }
 
