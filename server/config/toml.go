@@ -2,6 +2,8 @@ package config
 
 import (
 	"bytes"
+	"fmt"
+	"io/ioutil"
 	"text/template"
 
 	"github.com/spf13/viper"
@@ -193,5 +195,7 @@ func WriteConfigFile(configFilePath string, config *Config) {
 		panic(err)
 	}
 
-	tmos.MustWriteFile(configFilePath, buffer.Bytes(), 0644)
+	if err := ioutil.WriteFile(configFilePath, buffer.Bytes(), 0644); err != nil {
+		tmos.Exit(fmt.Sprintf("failed to write file: %v", err))
+	}
 }

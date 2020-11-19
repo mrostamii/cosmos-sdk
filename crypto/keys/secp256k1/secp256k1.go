@@ -16,7 +16,8 @@ import (
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types/errors"
 
-	secp256k1 "github.com/tendermint/tendermint/crypto/secp256k1"
+	secp256k1 "github.com/btcsuite/btcd/btcec"
+	tmsecp256k1 "github.com/tendermint/tendermint/crypto/secp256k1"
 )
 
 var _ cryptotypes.PrivKey = &PrivKey{}
@@ -36,15 +37,15 @@ func (privKey *PrivKey) Bytes() []byte {
 
 // PubKey performs the point-scalar multiplication from the privKey on the
 // generator point to get the pubkey.
-func (privKey *PrivKey) PubKey() crypto.PubKey {
-	_, pubkeyObject := btcec.PrivKeyFromBytes(btcec.S256(), privKey.Key)
+func (privKey *PrivKey) PubKey() cryptotypes.PubKey {
+	_, pubkeyObject := secp256k1.PrivKeyFromBytes(secp256k1.S256(), privKey.Key)
 	pk := pubkeyObject.SerializeCompressed()
 	return &PubKey{Key: pk}
 }
 
 // Equals - you probably don't need to use this.
 // Runs in constant time based on length of the
-func (privKey *PrivKey) Equals(other crypto.PrivKey) bool {
+func (privKey *PrivKey) Equals(other cryptotypes.LedgerPrivKey) bool {
 	return privKey.Type() == other.Type() && subtle.ConstantTimeCompare(privKey.Bytes(), other.Bytes()) == 1
 }
 
@@ -175,7 +176,7 @@ func (pubKey *PubKey) Type() string {
 	return keyType
 }
 
-func (pubKey *PubKey) Equals(other crypto.PubKey) bool {
+func (pubKey *PubKey) Equals(other cryptotypes.PubKey) bool {
 	return pubKey.Type() == other.Type() && bytes.Equal(pubKey.Bytes(), other.Bytes())
 }
 
@@ -208,15 +209,15 @@ func (pubKey *PubKey) UnmarshalAminoJSON(bz []byte) error {
 
 // AsTmPubKey converts our own PubKey into a Tendermint ED25519 pubkey.
 func (pubKey *PubKey) AsTmPubKey() crypto.PubKey {
-	return secp256k1.PubKey(pubKey.Key)
+	return tmsecp256k1.PubKey(pubKey.Key)
 }
 
 // FromTmSecp256k1 converts a Tendermint SECP256k1 pubkey into our own SECP256k1
 // PubKey.
 func FromTmSecp256k1(pubKey crypto.PubKey) (*PubKey, error) {
-	tmPk, ok := pubKey.(secp256k1.PubKey)
+	tmPk, ok := pubKey.(tmsecp256k1.PubKey)
 	if !ok {
-		return nil, fmt.Errorf("expected %T, got %T", secp256k1.PubKey{}, pubKey)
+		return nil, fmt.Errorf("expected %T, got %T", tmsecp256k1.PubKey{}, pubKey)
 	}
 
 	return &PubKey{Key: []byte(tmPk)}, nil

@@ -232,6 +232,10 @@ func (app *BaseApp) SetSnapshotStore(snapshotStore *snapshots.Store) {
 	if app.sealed {
 		panic("SetSnapshotStore() on sealed BaseApp")
 	}
+	if snapshotStore == nil {
+		app.snapshotManager = nil
+		return
+	}
 	app.snapshotManager = snapshots.NewManager(snapshotStore, app.cms)
 }
 
