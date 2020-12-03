@@ -59,5 +59,4 @@ require (
 
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.2-alpha.regen.4
 
-// replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20201123110246-2b1f77b579ca
-replace github.com/tendermint/tendermint => /Users/jdkanani/matic/tendermint
+replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20201203113225-7d8ac23501fb
