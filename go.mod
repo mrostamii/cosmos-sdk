@@ -26,6 +26,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/magiconair/properties v1.8.4
+	github.com/maticnetwork/bor v0.2.1
 	github.com/mattn/go-isatty v0.0.12
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/otiai10/copy v1.2.0
@@ -58,4 +59,4 @@ require (
 
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.2-alpha.regen.4
 
-replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20201123110246-2b1f77b579ca
+replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20201203113225-7d8ac23501fb

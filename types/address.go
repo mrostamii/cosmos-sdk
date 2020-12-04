@@ -2,7 +2,6 @@ package types
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 
 	yaml "gopkg.in/yaml.v2"
 
-	"github.com/cosmos/cosmos-sdk/codec/legacy"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types/bech32"
@@ -226,22 +224,6 @@ func (aa *AccAddress) UnmarshalYAML(data []byte) error {
 // Bytes returns the raw address bytes.
 func (aa AccAddress) Bytes() []byte {
 	return aa
-}
-
-// String implements the Stringer interface.
-func (aa AccAddress) String() string {
-	if aa.Empty() {
-		return ""
-	}
-
-	bech32PrefixAccAddr := GetConfig().GetBech32AccountAddrPrefix()
-
-	bech32Addr, err := bech32.ConvertAndEncode(bech32PrefixAccAddr, aa.Bytes())
-	if err != nil {
-		panic(err)
-	}
-
-	return bech32Addr
 }
 
 // Format implements the fmt.Formatter interface.
@@ -610,27 +592,6 @@ const (
 	Bech32PubKeyTypeConsPub Bech32PubKeyType = "conspub"
 )
 
-// Bech32ifyPubKey returns a Bech32 encoded string containing the appropriate
-// prefix based on the key type provided for a given PublicKey.
-// TODO: Remove Bech32ifyPubKey and all usages (cosmos/cosmos-sdk/issues/#7357)
-func Bech32ifyPubKey(pkt Bech32PubKeyType, pubkey cryptotypes.PubKey) (string, error) {
-	var bech32Prefix string
-
-	switch pkt {
-	case Bech32PubKeyTypeAccPub:
-		bech32Prefix = GetConfig().GetBech32AccountPubPrefix()
-
-	case Bech32PubKeyTypeValPub:
-		bech32Prefix = GetConfig().GetBech32ValidatorPubPrefix()
-
-	case Bech32PubKeyTypeConsPub:
-		bech32Prefix = GetConfig().GetBech32ConsensusPubPrefix()
-
-	}
-
-	return bech32.ConvertAndEncode(bech32Prefix, legacy.Cdc.MustMarshalBinaryBare(pubkey))
-}
-
 // MustBech32ifyPubKey calls Bech32ifyPubKey except it panics on error.
 func MustBech32ifyPubKey(pkt Bech32PubKeyType, pubkey cryptotypes.PubKey) string {
 	res, err := Bech32ifyPubKey(pkt, pubkey)
@@ -674,30 +635,4 @@ func MustGetPubKeyFromBech32(pkt Bech32PubKeyType, pubkeyStr string) cryptotypes
 	}
 
 	return res
-}
-
-// GetFromBech32 decodes a bytestring from a Bech32 encoded string.
-func GetFromBech32(bech32str, prefix string) ([]byte, error) {
-	if len(bech32str) == 0 {
-		return nil, errors.New("decoding Bech32 address failed: must provide an address")
-	}
-
-	hrp, bz, err := bech32.DecodeAndConvert(bech32str)
-	if err != nil {
-		return nil, err
-	}
-
-	if hrp != prefix {
-		return nil, fmt.Errorf("invalid Bech32 prefix; expected %s, got %s", prefix, hrp)
-	}
-
-	return bz, nil
-}
-
-func addressBytesFromHexString(address string) ([]byte, error) {
-	if len(address) == 0 {
-		return nil, errors.New("decoding Bech32 address failed: must provide an address")
-	}
-
-	return hex.DecodeString(address)
 }
