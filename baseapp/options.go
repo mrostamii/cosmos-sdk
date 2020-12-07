@@ -176,34 +176,6 @@ func (app *BaseApp) SetFauxMerkleMode() {
 	app.fauxMerkleMode = true
 }
 
-//
-// Side channel
-//
-
-// SetBeginSideBlocker sets begin side blocker
-func (app *BaseApp) SetBeginSideBlocker(beginSideBlocker sdk.BeginSideBlocker) {
-	if app.sealed {
-		panic("SetBeginSideBlocker() on sealed BaseApp")
-	}
-	app.beginSideBlocker = beginSideBlocker
-}
-
-// SetDeliverSideTxHandler sets deliver side-tx handler
-func (app *BaseApp) SetDeliverSideTxHandler(deliverSideTxHandler sdk.DeliverSideTxHandler) {
-	if app.sealed {
-		panic("SetDeliverSideTxHandler() on sealed BaseApp")
-	}
-	app.deliverSideTxHandler = deliverSideTxHandler
-}
-
-// SetPostDeliverTxHandler sets post deliver tx handler
-func (app *BaseApp) SetPostDeliverTxHandler(postDeliverTxHandler sdk.PostDeliverTxHandler) {
-	if app.sealed {
-		panic("SetPostDeliverTxHandler() on sealed BaseApp")
-	}
-	app.postDeliverTxHandler = postDeliverTxHandler
-}
-
 // SetCommitMultiStoreTracer sets the store tracer on the BaseApp's underlying
 // CommitMultiStore.
 func (app *BaseApp) SetCommitMultiStoreTracer(w io.Writer) {
