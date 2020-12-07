@@ -15,4 +15,4 @@ type BeginSideBlocker func(ctx Context, req abci.RequestBeginSideBlock) abci.Res
 type DeliverSideTxHandler func(ctx Context, tx Tx, req abci.RequestDeliverSideTx) abci.ResponseDeliverSideTx
 
 // PostDeliverTxHandler runs after deliver tx
-type PostDeliverTxHandler func(ctx Context, tx Tx, result Result)
+type PostDeliverTxHandler func(ctx Context, tx Tx, result *Result)
