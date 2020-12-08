@@ -739,6 +739,11 @@ func (app *BaseApp) runTx(mode runTxMode, txBytes []byte) (gInfo sdk.GasInfo, re
 			// append the events in the order of occurrence
 			result.Events = append(events.ToABCIEvents(), result.Events...)
 		}
+
+		// call post deliver tx handler
+		if app.postDeliverTxHandler != nil {
+			app.postDeliverTxHandler(ctx, tx, result)
+		}
 	}
 
 	return gInfo, result, err
