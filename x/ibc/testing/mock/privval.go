@@ -50,11 +50,11 @@ func (pv PV) SignProposal(chainID string, proposal *tmproto.Proposal) error {
 }
 
 // SignSideTxResult signs given data bytes
-func (pv PV) SignSideTxResult(sideTxResult *tmtypes.SideTxResultWithData) error {
-	sig, err := pv.PrivKey.Sign(sideTxResult.GetBytes())
+func (pv PV) SignSideTxResult(sideTxResult *tmproto.SideTxResultWithData) error {
+	sig, err := pv.PrivKey.Sign(tmtypes.SignTxResultBytes(sideTxResult))
 	if err != nil {
 		return err
 	}
-	sideTxResult.Sig = sig
+	sideTxResult.Result.Sig = sig
 	return nil
 }
