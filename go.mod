@@ -30,6 +30,6 @@ require (
 	gopkg.in/yaml.v2 v2.2.2
 )
 
-replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230509135620-494b20f516d3
+replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230510105645-e56067ff4b90
 
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.2.16
