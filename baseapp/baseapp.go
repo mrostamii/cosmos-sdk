@@ -740,7 +740,7 @@ func validateBasicTxMsgs(msgs []sdk.Msg) sdk.Error {
 	}
 
 	for _, msg := range msgs {
-		fmt.Println("########Reached here 743#####")
+		fmt.Println("########Reached here 74113#####")
 		// Validate the Msg.
 		err := msg.ValidateBasic()
 		if err != nil {
