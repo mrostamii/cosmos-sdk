@@ -735,10 +735,12 @@ func (app *BaseApp) DeliverTx(req abci.RequestDeliverTx) (res abci.ResponseDeliv
 // validateBasicTxMsgs executes basic validator calls for messages.
 func validateBasicTxMsgs(msgs []sdk.Msg) sdk.Error {
 	if msgs == nil || len(msgs) == 0 {
+		fmt.Println("########Reached here 738#####")
 		return sdk.ErrUnknownRequest("Tx.GetMsgs() must return at least one message in list")
 	}
 
 	for _, msg := range msgs {
+		fmt.Println("########Reached here 743#####")
 		// Validate the Msg.
 		err := msg.ValidateBasic()
 		if err != nil {
@@ -763,7 +765,7 @@ func (app *BaseApp) getContextForTx(mode runTxMode, txBytes []byte) (ctx sdk.Con
 	return
 }
 
-/// runMsgs iterates through all the messages and executes them.
+// / runMsgs iterates through all the messages and executes them.
 func (app *BaseApp) runMsgs(ctx sdk.Context, msgs []sdk.Msg, mode runTxMode) (result sdk.Result) {
 	msgLogs := make(sdk.ABCIMessageLogs, 0, len(msgs))
 
@@ -919,14 +921,23 @@ func (app *BaseApp) runTx(mode runTxMode, txBytes []byte, tx sdk.Tx) (result sdk
 		}
 	}()
 
+	fmt.Println("########TXX#####922222", tx)
 	var msgs = tx.GetMsgs()
+
+	fmt.Println("########TXX#####925555", tx)
 	if err := validateBasicTxMsgs(msgs); err != nil {
+		fmt.Println("########Error#####", err)
+		fmt.Println("########Error Result#####", err.Result())
+		fmt.Println("########Error Result#####", err.Result().Code)
+		fmt.Println("########Error Result#####", err.Result().Codespace)
 		return err.Result()
 	}
 
 	if app.anteHandler != nil {
 		var anteCtx sdk.Context
 		var msCache sdk.CacheMultiStore
+
+		fmt.Println("########Enter AnteHandler#####")
 
 		// Cache wrap context before anteHandler call in case it aborts.
 		// This is required for both CheckTx and DeliverTx.
