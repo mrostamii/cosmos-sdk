@@ -79,8 +79,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230719144702-2a4b4a5a8b55
+replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230908043840-c0733aeed2ce
 
-replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.0.0-beta
+replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.0.0-beta.0.20230908040206-9ed4c9e57d53 // TODO: remove after tests
 
 replace github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0
