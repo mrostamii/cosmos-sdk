@@ -13,7 +13,7 @@ To start a REST server, we need to specify the following parameters:
 For example:
 
 ```bash
-gaiacli rest-server --chain-id=test \
+gaiacli rest-server --chain=test \
     --laddr=tcp://localhost:1317 \
     --node tcp://localhost:26657 \
     --trust-node=false

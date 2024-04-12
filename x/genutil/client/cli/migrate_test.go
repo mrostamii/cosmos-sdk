@@ -25,7 +25,7 @@ func setupCmd(genesisTime string, chainId string) *cobra.Command {
 	}
 
 	c.Flags().String(flagGenesisTime, genesisTime, "")
-	c.Flags().String(flagChainId, chainId, "")
+	c.Flags().String(flagChain, chain, "")
 
 	return c
 }
